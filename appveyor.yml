@@ -7,12 +7,8 @@ before_build:
     mkdir cmake_build
     cd cmake_build
     cmake --version
-build_script:
-  cmake c:\projects\q2vkpt
- 
+
+build_script: cmake c:\projects\q2vkpt
+
 artifacts:
- - path: cmake_build\Release\**\*.*
- - path: cmake_build\Release\*.*
- - path: cmake_build\**\*.exe
- - path: cmake_build\**\*.lib
- 
+ - path: cmake_build\**\*.zip

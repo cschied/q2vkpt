@@ -9,7 +9,7 @@ install:
   - cmake --version
   - cmake c:\projects\q2vkpt
 
-build_script: msbuild "C:\projects\q2vkpt\cmake_build\q2vkpt.sln"
+build_script: msbuild "C:\projects\q2vkpt\cmake_build\quake2-pt.sln"
 
 artifacts:
  - path: cmake_build\Release\**\*.*

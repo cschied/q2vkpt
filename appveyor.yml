@@ -1,14 +1,15 @@
 image: Visual Studio 2017
 configuration: Release
 
-before_build:
-- cmd: |-
-    cd %APPVEYOR_BUILD_FOLDER%
-    mkdir cmake_build
-    cd cmake_build
-    cmake --version
+install:
+  ## Prepare .sln with cmake
+  - cd %APPVEYOR_BUILD_FOLDER%
+  - mkdir cmake_build
+  - cd cmake_build
+  - cmake --version
+  - cmake c:\projects\q2vkpt
 
-build_script: cmake c:\projects\q2vkpt
+build_script: msbuild "C:\projects\mozjpeg\cmake_build\q2vkpt.sln"
 
 artifacts:
- - path: cmake_build\**\*.zip
+ - path: cmake_build\Release\**\*.*

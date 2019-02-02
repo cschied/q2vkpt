@@ -20,7 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define  _GLOBAL_UBO_DESCRIPTOR_SET_LAYOUT_H_
 
 #define SHADER_MAX_ENTITIES                  256
-#define SHADER_MAX_BSP_ENTITIES              32
+#define SHADER_MAX_BSP_ENTITIES              48
 #define MAX_LIGHT_SOURCES                    32
 
 #define GLOBAL_UBO_BINDING_IDX               0

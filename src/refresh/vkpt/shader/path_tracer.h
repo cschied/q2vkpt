@@ -820,7 +820,7 @@ path_tracer()
 		if(!found_intersection(ray_payload_brdf)) {
 			vec3 env = env_map(direction);
 			env *= env;
-			contrib += throughput * env * 20.0;
+			contrib += throughput * env * 6.0;
 			break;
 		}
 

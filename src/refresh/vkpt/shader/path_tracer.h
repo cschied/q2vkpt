@@ -267,10 +267,10 @@ get_rng(uint idx)
 	uvec3 p = uvec3(rng_seed, rng_seed >> 10, rng_seed >> 20);
 	p.z = (p.z * NUM_RNG_PER_FRAME + idx);
 	p &= uvec3(BLUE_NOISE_RES - 1, BLUE_NOISE_RES - 1, NUM_BLUE_NOISE_TEX - 1);
-
 	return min(texelFetch(TEX_BLUE_NOISE, ivec3(p), 0).r, 0.9999999999999);
-	//return fract(vec2(get_rng_uint(idx)) / vec2(0xffffffffu));
+	//return fract((vec2(get_rng_uint(idx)) / vec2(0xffffffffu)).x);
 }
+
 
 vec3
 env_map(vec3 direction)
@@ -438,6 +438,41 @@ is_lava(uint material)
 	return (material & flag) == flag;
 }
 
+#define swap(a,b) { float x = a; a = b; b = x; }
+
+float fresnel(float ior, vec3 N, vec3 I) {
+  float cosi = clamp(dot(I, N), -1.f, 1.f);
+  float etai = 1, etat = ior;
+  float kr;
+  if (cosi > 0) { swap(etai, etat); }
+  // Compute sini using Snell's law
+  float sint = etai / etat * sqrt(max(0.f, 1 - cosi * cosi));
+  // Total internal reflection
+  if (sint >= 1) {
+    kr = 1;
+  } else {
+    float cost = sqrt(max(0.f, 1 - sint * sint));
+    cosi = abs(cosi);
+    float Rs = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost));
+    float Rp = ((etai * cosi) - (etat * cost)) / ((etai * cosi) + (etat * cost));
+    kr = (Rs * Rs + Rp * Rp) / 2;
+  }
+  // As a consequence of the conservation of energy, transmittance is given by:
+  // kt = 1 - kr;
+  kr = kr * 0.5 + 0.5;
+  return kr;
+}
+
+vec3 refract(float ior, vec3 N, vec3 I) {
+  float cosi = clamp(dot(I, N), -1.f, 1.f);
+  float etai = 1, etat = ior;
+  vec3 n = N;
+  if (cosi < 0) { cosi = -cosi; } else { swap(etai, etat); n= -N; }
+  float eta = etai / etat;
+  float k = 1 - eta * eta * (1 - cosi * cosi);
+  return normalize(I * eta + n * (eta * cosi - sqrt(k)));
+}
+
 vec4
 path_tracer()
 {
@@ -500,7 +535,7 @@ path_tracer()
 
 		if(!found_intersection(ray_payload_brdf) && !is_gradient) {
 			vec3 env = env_map(ray.direction);
-			store_no_hit(env_map(ray.direction), vec3(0));
+			store_no_hit(env, vec3(0));
 			#ifndef RTX
 			return vec4(1, 1, 1, false);
 			#else
@@ -591,10 +626,16 @@ path_tracer()
 		if(is_water(material_id)) {
 			vec3 water_normal = waterd(position.xy * 0.1).xzy;
 			float F = pow(1.0 - max(0.0, -dot(direction, water_normal)), 5.0);
-			direction = reflect(direction, water_normal);
-			trace_ray(Ray(position, direction, 0.01, 10000.0));
+			float rng_frensel = get_rng(17);
+			if (rng_frensel < fresnel(1.333, water_normal, direction)) {
+				direction = reflect(direction, water_normal);
+			} else {
+				direction = refract(1.333, water_normal, direction);
+			}
 			throughput *= mix(vec3(0.1, 0.1, 0.15), vec3(1.0), F);
 			contrib += (1.0 - F) * vec3(0.2, 0.4, 0.4) * 0.5;
+
+			trace_ray(Ray(position, direction, 0.01, 10000.0));
 
 			if(!found_intersection(ray_payload_brdf))
 			{

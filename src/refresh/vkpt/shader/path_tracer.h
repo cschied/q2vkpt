@@ -51,6 +51,8 @@ uniform accelerationStructureNV topLevelAS;
 #define ALBEDO_MULT 1.3
 
 #define NUM_BOUNCES 2
+#define GAMMA 2.2
+#define APPLY_GAMMA(a) vec3(pow(a.x, 1/GAMMA), pow(a.y, 1/GAMMA), pow(a.z, 1/GAMMA))
 
 #define RNG_PRIMARY_OFF_X   0
 #define RNG_PRIMARY_OFF_Y   1
@@ -725,7 +727,8 @@ path_tracer()
 		}
 	}
 
-	return vec4(contrib * 2.0, false);
+    contrib *= 2;
+	return vec4(APPLY_GAMMA(contrib), false);
 
 #else
 	int bounce = 0;
@@ -820,7 +823,7 @@ path_tracer()
 		if(!found_intersection(ray_payload_brdf)) {
 			vec3 env = env_map(direction);
 			env *= env;
-			contrib += throughput * env * 6.0;
+			contrib += throughput * env * 20.0;
 			break;
 		}
 
@@ -851,7 +854,7 @@ path_tracer()
 			bounce++;
 	}
 
-	return vec4(contrib, temporal_accum); // / (primary_albedo + 0.00001);
+	return vec4(APPLY_GAMMA(contrib), temporal_accum); // / (primary_albedo + 0.00001);
 #endif
 }
 

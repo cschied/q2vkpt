@@ -166,7 +166,7 @@ uint rng_seed;
 void
 trace_ray(Ray ray)
 {
-	const uint rayFlags = gl_RayFlagsOpaqueNV;
+	const uint rayFlags = gl_RayFlagsOpaqueNV | gl_RayFlagsCullBackFacingTrianglesNV;
 	//const uint rayFlags = gl_RayFlagsOpaqueNV | gl_RayFlagsCullBackFacingTrianglesNV;
 	const uint cullMask = 0xff;
 
@@ -461,7 +461,6 @@ float fresnel(float ior, vec3 N, vec3 I) {
   }
   // As a consequence of the conservation of energy, transmittance is given by:
   // kt = 1 - kr;
-  kr = kr * 0.5 + 0.5;
   return kr;
 }
 
@@ -627,21 +626,23 @@ path_tracer()
 
 		if(is_water(material_id)) {
 			vec3 water_normal = waterd(position.xy * 0.1).xzy;
-			float F = pow(1.0 - max(0.0, -dot(direction, water_normal)), 5.0);
+			float F = fresnel(1.333, water_normal, direction);
+			float F2 = F * 0.7 + 0.3;
+
 			float rng_frensel = get_rng(17);
-			if (rng_frensel < fresnel(1.333, water_normal, direction)) {
+			if (rng_frensel < F2) {
 				direction = reflect(direction, water_normal);
 			} else {
 				direction = refract(1.333, water_normal, direction);
 			}
-			throughput *= mix(vec3(0.1, 0.1, 0.15), vec3(1.0), F);
-			contrib += (1.0 - F) * vec3(0.2, 0.4, 0.4) * 0.5;
+
+			contrib += vec3(0.2, 0.4, 0.4) * 0.5;
 
 			trace_ray(Ray(position, direction, 0.01, 10000.0));
 
 			if(!found_intersection(ray_payload_brdf))
 			{
-				primary_albedo = env_map(direction); // * throughput;
+				primary_albedo = env_map(direction) * throughput;
 				store_no_hit(primary_albedo, motion);
 				return vec4(contrib, false);
 			}
@@ -656,18 +657,40 @@ path_tracer()
 			material_id    = triangle.material_id;
 			albedo         = global_textureLod(triangle.material_id, tex_coord, 2).rgb * ALBEDO_MULT;
 			cluster_idx    = triangle.cluster;
-			primary_albedo = albedo;
-			albedo         = vec3(1);
+			primary_albedo = albedo * throughput;
 
-			temporal_accum = true;
+			temporal_accum = false;
 
 			if(dot(direction, normal) > 0)
 				normal = -normal;
-		}
+		} else if((material_id & BSP_FLAG_TRANSPARENT) > 0) {
+			contrib += vec3(0.2, 0.4, 0.4) * 0.5;
 
-		if((material_id & BSP_FLAG_TRANSPARENT) > 0) {
+			trace_ray(Ray(position, direction, 0.01, 10000.0));
+
+			if(!found_intersection(ray_payload_brdf))
+			{
+				primary_albedo = env_map(direction) * 0.9 + primary_albedo * 0.1;
+				store_no_hit(primary_albedo, motion);
+				return vec4(contrib, false);
+			}
+
+			Triangle triangle = get_hit_triangle(ray_payload_brdf);
+			vec3 bary         = get_hit_barycentric(ray_payload_brdf);
+			vec2 tex_coord    = triangle.tex_coords * bary;
+
+			/* world-space */
+			position       = triangle.positions * bary;
+			normal         = normalize(triangle.normals * bary);
+			material_id    = triangle.material_id;
+			albedo         = global_textureLod(triangle.material_id, tex_coord, 2).rgb * ALBEDO_MULT;
+			cluster_idx    = triangle.cluster;
+			primary_albedo = albedo * 0.9 + primary_albedo * 0.1;
+
 			temporal_accum = false;
-			contrib += vec3(0.05); // XXX hack! makes windows appear a bit milky
+
+			if(dot(direction, normal) > 0)
+				normal = -normal;
 		}
 
 		if((material_id & BSP_FLAG_LIGHT) > 0) {

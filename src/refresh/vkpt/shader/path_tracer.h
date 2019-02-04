@@ -624,7 +624,7 @@ path_tracer()
 
 		vec3 motion = vec3(pos_prev_cs - pos_curr_cs);
 
-		if(is_water(material_id)) {
+		if(is_water(material_id) && (normal.z > 0.5 || normal.z < -0.5)) {
 			vec3 water_normal = waterd(position.xy * 0.1).xzy;
 			float F = fresnel(1.333, water_normal, direction);
 			float F2 = F * 0.7 + 0.3;

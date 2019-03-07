@@ -133,9 +133,7 @@ main()
 	if(any(greaterThanEqual(ipos, ivec2(global_ubo.width, global_ubo.height))))
 		return;
 
-#define tex_depth_normal ((global_ubo.current_frame_idx % 1) > 0 ?  IMG_PT_DEPTH_NORMAL_A : IMG_PT_DEPTH_NORMAL_B)
-
-	const int frame_idx = global_ubo.current_frame_idx % 1;
+	const int frame_idx = global_ubo.current_frame_idx & 1;
 
 	vec4 filtered = vec4(0);
 	switch(push.iteration) {

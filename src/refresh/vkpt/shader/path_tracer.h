@@ -51,6 +51,8 @@ uniform accelerationStructureNV topLevelAS;
 #define ALBEDO_MULT 1.3
 
 #define NUM_BOUNCES 2
+#define GAMMA 2.2
+#define APPLY_GAMMA(a) vec3(pow(a.x, 1/GAMMA), pow(a.y, 1/GAMMA), pow(a.z, 1/GAMMA))
 
 #define RNG_PRIMARY_OFF_X   0
 #define RNG_PRIMARY_OFF_Y   1
@@ -164,7 +166,7 @@ uint rng_seed;
 void
 trace_ray(Ray ray)
 {
-	const uint rayFlags = gl_RayFlagsOpaqueNV;
+	const uint rayFlags = gl_RayFlagsOpaqueNV | gl_RayFlagsCullBackFacingTrianglesNV;
 	//const uint rayFlags = gl_RayFlagsOpaqueNV | gl_RayFlagsCullBackFacingTrianglesNV;
 	const uint cullMask = 0xff;
 
@@ -267,10 +269,10 @@ get_rng(uint idx)
 	uvec3 p = uvec3(rng_seed, rng_seed >> 10, rng_seed >> 20);
 	p.z = (p.z * NUM_RNG_PER_FRAME + idx);
 	p &= uvec3(BLUE_NOISE_RES - 1, BLUE_NOISE_RES - 1, NUM_BLUE_NOISE_TEX - 1);
-
 	return min(texelFetch(TEX_BLUE_NOISE, ivec3(p), 0).r, 0.9999999999999);
-	//return fract(vec2(get_rng_uint(idx)) / vec2(0xffffffffu));
+	//return fract((vec2(get_rng_uint(idx)) / vec2(0xffffffffu)).x);
 }
+
 
 vec3
 env_map(vec3 direction)
@@ -438,6 +440,40 @@ is_lava(uint material)
 	return (material & flag) == flag;
 }
 
+#define swap(a,b) { float x = a; a = b; b = x; }
+
+float fresnel(float ior, vec3 N, vec3 I) {
+  float cosi = clamp(dot(I, N), -1.f, 1.f);
+  float etai = 1, etat = ior;
+  float kr;
+  if (cosi > 0) { swap(etai, etat); }
+  // Compute sini using Snell's law
+  float sint = etai / etat * sqrt(max(0.f, 1 - cosi * cosi));
+  // Total internal reflection
+  if (sint >= 1) {
+    kr = 1;
+  } else {
+    float cost = sqrt(max(0.f, 1 - sint * sint));
+    cosi = abs(cosi);
+    float Rs = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost));
+    float Rp = ((etai * cosi) - (etat * cost)) / ((etai * cosi) + (etat * cost));
+    kr = (Rs * Rs + Rp * Rp) / 2;
+  }
+  // As a consequence of the conservation of energy, transmittance is given by:
+  // kt = 1 - kr;
+  return kr;
+}
+
+vec3 refract(float ior, vec3 N, vec3 I) {
+  float cosi = clamp(dot(I, N), -1.f, 1.f);
+  float etai = 1, etat = ior;
+  vec3 n = N;
+  if (cosi < 0) { cosi = -cosi; } else { swap(etai, etat); n= -N; }
+  float eta = etai / etat;
+  float k = 1 - eta * eta * (1 - cosi * cosi);
+  return normalize(I * eta + n * (eta * cosi - sqrt(k)));
+}
+
 vec4
 path_tracer()
 {
@@ -500,7 +536,7 @@ path_tracer()
 
 		if(!found_intersection(ray_payload_brdf) && !is_gradient) {
 			vec3 env = env_map(ray.direction);
-			store_no_hit(env_map(ray.direction), vec3(0));
+			store_no_hit(env, vec3(0));
 			#ifndef RTX
 			return vec4(1, 1, 1, false);
 			#else
@@ -588,17 +624,25 @@ path_tracer()
 
 		vec3 motion = vec3(pos_prev_cs - pos_curr_cs);
 
-		if(is_water(material_id)) {
+		if(is_water(material_id) && (normal.z > 0.5 || normal.z < -0.5)) {
 			vec3 water_normal = waterd(position.xy * 0.1).xzy;
-			float F = pow(1.0 - max(0.0, -dot(direction, water_normal)), 5.0);
-			direction = reflect(direction, water_normal);
+			float F = fresnel(1.333, water_normal, direction);
+			float F2 = F * 0.7 + 0.3;
+
+			float rng_frensel = get_rng(17);
+			if (rng_frensel < F2) {
+				direction = reflect(direction, water_normal);
+			} else {
+				direction = refract(1.333, water_normal, direction);
+			}
+
+			contrib += vec3(0.2, 0.4, 0.4) * 0.5;
+
 			trace_ray(Ray(position, direction, 0.01, 10000.0));
-			throughput *= mix(vec3(0.1, 0.1, 0.15), vec3(1.0), F);
-			contrib += (1.0 - F) * vec3(0.2, 0.4, 0.4) * 0.5;
 
 			if(!found_intersection(ray_payload_brdf))
 			{
-				primary_albedo = env_map(direction); // * throughput;
+				primary_albedo = env_map(direction) * throughput;
 				store_no_hit(primary_albedo, motion);
 				return vec4(contrib, false);
 			}
@@ -613,18 +657,40 @@ path_tracer()
 			material_id    = triangle.material_id;
 			albedo         = global_textureLod(triangle.material_id, tex_coord, 2).rgb * ALBEDO_MULT;
 			cluster_idx    = triangle.cluster;
-			primary_albedo = albedo;
-			albedo         = vec3(1);
+			primary_albedo = albedo * throughput;
 
-			temporal_accum = true;
+			temporal_accum = false;
 
 			if(dot(direction, normal) > 0)
 				normal = -normal;
-		}
+		} else if((material_id & BSP_FLAG_TRANSPARENT) > 0) {
+			contrib += vec3(0.2, 0.4, 0.4) * 0.5;
 
-		if((material_id & BSP_FLAG_TRANSPARENT) > 0) {
+			trace_ray(Ray(position, direction, 0.01, 10000.0));
+
+			if(!found_intersection(ray_payload_brdf))
+			{
+				primary_albedo = env_map(direction) * 0.9 + primary_albedo * 0.1;
+				store_no_hit(primary_albedo, motion);
+				return vec4(contrib, false);
+			}
+
+			Triangle triangle = get_hit_triangle(ray_payload_brdf);
+			vec3 bary         = get_hit_barycentric(ray_payload_brdf);
+			vec2 tex_coord    = triangle.tex_coords * bary;
+
+			/* world-space */
+			position       = triangle.positions * bary;
+			normal         = normalize(triangle.normals * bary);
+			material_id    = triangle.material_id;
+			albedo         = global_textureLod(triangle.material_id, tex_coord, 2).rgb * ALBEDO_MULT;
+			cluster_idx    = triangle.cluster;
+			primary_albedo = albedo * 0.9 + primary_albedo * 0.1;
+
 			temporal_accum = false;
-			contrib += vec3(0.05); // XXX hack! makes windows appear a bit milky
+
+			if(dot(direction, normal) > 0)
+				normal = -normal;
 		}
 
 		if((material_id & BSP_FLAG_LIGHT) > 0) {
@@ -684,7 +750,8 @@ path_tracer()
 		}
 	}
 
-	return vec4(contrib * 2.0, false);
+    contrib *= 2;
+	return vec4(APPLY_GAMMA(contrib), false);
 
 #else
 	int bounce = 0;
@@ -810,7 +877,7 @@ path_tracer()
 			bounce++;
 	}
 
-	return vec4(contrib, temporal_accum); // / (primary_albedo + 0.00001);
+	return vec4(APPLY_GAMMA(contrib), temporal_accum); // / (primary_albedo + 0.00001);
 #endif
 }
 

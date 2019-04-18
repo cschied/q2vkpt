@@ -3,7 +3,7 @@ configuration: Release
 
 install:
   ## Clone git submodules
-   - git submodule update --init --recursive
+  - git submodule update --init --recursive
   ## Prepare .sln with cmake
   - cd %APPVEYOR_BUILD_FOLDER%
   - mkdir cmake_build

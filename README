@@ -7,7 +7,7 @@ Improvements:
 - fixed all functionality of misc actor (now all defined features works fine - limited to grunt skins only).
 - unlocked drop/get/spawn weapon blaster,
 - unlocked spawn monster makron,
-- fixed repeating monster slights when player is dead,
+- fixed repeating monster sights when player is dead,
 - added new game skill "hell".
 
 Base fixes/changes only in hell mode/skill:
@@ -29,7 +29,7 @@ Base fixes/changes only in hell mode/skill:
 - many monsters improvements and behaviour changed.
 
 Possible improvements:
-- switch off monster slight sounds in hell skill.
+- switch off monster sight sounds in hell skill.
 
 TODO:
 - some monsters like medic have a origin not equal to the world origin (monster "s.origin" is different as really is - eg in map jail3)!,

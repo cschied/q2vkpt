@@ -1,3 +1,43 @@
+This is Quake II game AI project based on 3.21 original source code.
+Code was adapted to Q2VKPT engine (see https://github.com/cschied/q2vkpt/ & http://brechpunkt.de/q2vkpt/).
+
+This is not a game mod (skill levels from 0 to 3 is like original - unchanged).
+
+Improvements:
+- fixed all functionality of misc actor (now all defined features works fine - limited to grunt skins only).
+- unlocked drop/get/spawn weapon blaster,
+- unlocked spawn monster makron,
+- fixed repeating monster slights when player is dead,
+- added new game skill "hell".
+
+Base fixes/changes only in hell mode/skill:
+- fixed monster medic thinking before looking for a dead monster,
+- monster medic now can kill self and others when dead monster was revived in the same area (before they are stuck both),
+- when gibs was revived, now monster isn't in stuck, like it is in other level skills,
+- monster mutant do not stop jumping when is in high,
+- monster gunner now trying to shot the target too when dying,
+- monster supertank now non-stop attacking by rockets,
+- for monsters increased health by 25% and 25% more damage,
+- monsters have 5x more probability to hit you,
+- monsters always shot target when ducking,
+- monsters are only angry of you and your friends even hit by themselfs,
+- monsters always are trying to shot the target when dying,
+- monsters always avenge their ally,
+- monsters using only best weapons,
+- monster base behavior is standing and fighting but not running like it was,
+- melee monsters are much more stronger,
+- many monsters improvements and behaviour changed.
+
+Possible improvements:
+- switch off monster slight sounds in hell skill.
+
+TODO:
+- some monsters like medic have a origin not equal to the world origin (monster "s.origin" is different as really is - eg in map jail3)!,
+- lack of path research tech (path trace is not enough if exist hole between positions - eg medic in map jail3),
+- some optimalizations required eg search a new target.
+
+Original Q2VKPT project description:
+
 Welcome to Q2VKPT, a Quake II engine with real-time path tracing.  This client
 implements fully dynamic illumination without precomputation supporting area
 light sources, reflections, soft shadows, and indirect illumination. This
@@ -10,4 +50,6 @@ VK_NV_ray_tracing.
 Please refer to our project page for more details.
 
 Project homepage: http://brechpunkt.de/q2vkpt
+
+
 

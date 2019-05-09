@@ -666,7 +666,8 @@ void P_WorldEffects(void)
         if (current_player->watertype & CONTENTS_LAVA) {
             if (current_player->health > 0
                 && current_player->pain_debounce_time <= level.time
-                && current_client->invincible_framenum < level.framenum) {
+                && current_client->invincible_framenum < level.framenum
+                && !(current_player->flags & FL_GODMODE)) {
                 if (rand() & 1)
                     gi.sound(current_player, CHAN_VOICE, gi.soundindex("player/burn1.wav"), 1, ATTN_NORM, 0);
                 else

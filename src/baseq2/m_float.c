@@ -61,7 +61,7 @@ void floater_fire_blaster(edict_t *self)
     vec3_t  forward, right;
     vec3_t  end;
     vec3_t  dir;
-    int     effect;
+    int     effect, dmg;
 
     if ((self->s.frame == FRAME_attak104) || (self->s.frame == FRAME_attak107))
         effect = EF_HYPERBLASTER;
@@ -74,7 +74,9 @@ void floater_fire_blaster(edict_t *self)
     end[2] += self->enemy->viewheight;
     VectorSubtract(end, start, dir);
 
-    monster_fire_blaster(self, start, dir, 1, 1000, MZ2_FLOAT_BLASTER_1, effect);
+    dmg = ((skill->value > 3)? 2 : 1);
+
+    monster_fire_blaster(self, start, dir, dmg, 1000, MZ2_FLOAT_BLASTER_1, effect);
 }
 
 
@@ -542,6 +544,12 @@ void floater_attack(edict_t *self)
 
 void floater_melee(edict_t *self)
 {
+    if (skill->value > 3) {
+        floater_attack(self);
+
+        return;
+    }
+	
     if (random() < 0.5)
         self->monsterinfo.currentmove = &floater_move_attack3;
     else
@@ -560,8 +568,8 @@ void floater_pain(edict_t *self, edict_t *other, float kick, int damage)
         return;
 
     self->pain_debounce_time = level.time + 3;
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     n = (rand() + 1) % 3;
     if (n == 0) {
@@ -619,6 +627,11 @@ void SP_monster_floater(edict_t *self)
     self->health = 200;
     self->gib_health = -80;
     self->mass = 300;
+
+    if (skill->value > 3) {
+        self->health *= 1.25; // 25% more health for monsters
+        self->gib_health *= 1.25;
+    }
 
     self->pain = floater_pain;
     self->die = floater_die;

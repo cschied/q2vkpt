@@ -277,7 +277,9 @@ qboolean visible(edict_t *self, edict_t *other)
     spot2[2] += other->viewheight;
     trace = gi.trace(spot1, vec3_origin, vec3_origin, spot2, self, MASK_OPAQUE);
 
-    if (trace.fraction == 1.0)
+    if ((trace.fraction == 1.0) ||
+        // in hell monster can see you if you are near the way
+        ((skill->value == 4) && (trace.fraction > 0.75)))
         return qtrue;
     return qfalse;
 }
@@ -316,7 +318,7 @@ void HuntTarget(edict_t *self)
     self->goalentity = self->enemy;
     if (self->monsterinfo.aiflags & AI_STAND_GROUND)
         self->monsterinfo.stand(self);
-    else
+    else if (self->monsterinfo.run) // when medic try to revive you is null
         self->monsterinfo.run(self);
     VectorSubtract(self->enemy->s.origin, self->s.origin, vec);
     self->ideal_yaw = vectoyaw(vec);
@@ -328,7 +330,7 @@ void HuntTarget(edict_t *self)
 void FoundTarget(edict_t *self)
 {
     // let other monsters see this monster for a while
-    if (self->enemy->client) {
+    if (IS_PLAYER_ALLY(self->enemy)) {
         level.sight_entity = self;
         level.sight_entity_framenum = level.framenum;
         level.sight_entity->light_level = 128;
@@ -384,17 +386,93 @@ slower noticing monsters.
 */
 qboolean FindTarget(edict_t *self)
 {
-    edict_t     *client;
+    edict_t     *client, *ent;
     qboolean    heardit;
     int         r;
 
-    if (self->monsterinfo.aiflags & AI_GOOD_GUY) {
-        if (self->goalentity && self->goalentity->inuse && self->goalentity->classname) {
-            if (strcmp(self->goalentity->classname, "target_actor") == 0)
+    // ugly thing but monster should always getting angry for actor
+    if ((client = level.sight_entity) /*&& (client != self)*/ && !IS_PLAYER_ALLY(self)){
+        if ((client->deadflag != DEAD_NO) || (client->health < 1) ||
+            // it's possible to sight "no class" entity when jorg died and fired BFG in the same time
+            !strcmp(client->classname, "noclass"))
+            // FIXME: sometimes makes too many unnecessary sight sounds?
+            level.sight_entity = NULL;
+        // get aggro for actor first possible
+        else if (!self->enemy && (client != self->enemy) && !IS_ACTOR(client)) {
+            ent = NULL;
+            while ((ent = findradius(ent, self->s.origin, 1024)) != NULL)
+            {
+                if (ent == self)
+                    continue;
+                if (!IS_ACTOR(ent))
+                    continue;
+                if (ent->health < 1)
+                    continue;
+                if (!visible(self, ent) && !infront(self, ent))
+                    continue;
+                self->oldenemy = self->enemy;
+                self->enemy = ent;
+
+                FoundTarget(self);
+
+                client = ent;
+
+                // TODO: silent sight in hell?
+                if (!(self->monsterinfo.aiflags & AI_SOUND_TARGET) && (self->monsterinfo.sight))
+                    self->monsterinfo.sight(self, self->enemy);
+
+                // enemy could change if client is a player
+                // return qtrue;
+            }
+        }
+    }
+
+    if (IS_GOOD_GUY(self)){
+        if (IS_ACTOR(self)){
+            if (!client /*&& (self->deadflag == DEAD_NO)*/ && (self->health > 0)) {
+                level.sight_entity = self;
+                level.sight_entity_framenum = level.framenum;
+                level.sight_entity->light_level = 128;
+            }
+        }
+
+        if (self->goalentity && self->goalentity->inuse && self->goalentity->classname){
+            if (IS_ACTOR(self->goalentity))
                 return qfalse;
         }
 
-        //FIXME look for monsters?
+        // skip insane?
+        if (!strcmp(self->classname, "misc_insane"))
+            return qfalse;
+
+        if (!self->enemy || (self->enemy->deadflag != DEAD_NO)){
+            ent = NULL;
+            while ((ent = findradius(ent, self->s.origin, 1024)) != NULL)
+            {
+                if (ent == self)
+                    continue;
+                if (!(ent->svflags & SVF_MONSTER))
+                    continue;
+                if (IS_PLAYER_ALLY(ent))
+                    continue;
+                if (ent->health < 1)
+                    continue;
+                if (!visible(self, ent) && !infront(self, ent))
+                    continue;
+
+                self->oldenemy = self->enemy;
+                self->enemy = ent;
+
+                FoundTarget(self);
+
+                // there is no actor sight!
+                //if (!(self->monsterinfo.aiflags & AI_SOUND_TARGET) && (self->monsterinfo.sight))
+                //    self->monsterinfo.sight (self, self->enemy);
+
+                return qtrue;
+            }
+        }
+
         return qfalse;
     }
 
@@ -409,9 +487,25 @@ qboolean FindTarget(edict_t *self)
 // revised behavior so they will wake up if they "see" a player make a noise
 // but not weapon impact/explosion noises
 
+    // when monster "see" an actor
+    if (!self->enemy && client && (self->enemy != client) && IS_ACTOR(client) &&
+        infront(self, client) && visible(self, client)) {
+        self->oldenemy = self->enemy;
+        self->enemy = client;
+        
+        FoundTarget(self);
+
+        // FIXME: free sight_entity for another actor?
+        //level.sight_entity = NULL;
+
+        if (!(self->monsterinfo.aiflags & AI_SOUND_TARGET) && self->monsterinfo.sight)
+            self->monsterinfo.sight(self, self->enemy);
+
+        return qtrue;
+    }
+
     heardit = qfalse;
-    if ((level.sight_entity_framenum >= (level.framenum - 1)) && !(self->spawnflags & 1)) {
-        client = level.sight_entity;
+    if (client && (level.sight_entity_framenum >= (level.framenum - 1)) && !(self->spawnflags & 1)) {
         if (client->enemy == self->enemy) {
             return qfalse;
         }
@@ -606,8 +700,10 @@ qboolean M_CheckAttack(edict_t *self)
 
     if (skill->value == 0)
         chance *= 0.5;
-    else if (skill->value >= 2)
+    else if (skill->value < 4)
         chance *= 2;
+    else
+        chance *= 5;
 
     if (random() < chance) {
         self->monsterinfo.attack_state = AS_MISSILE;
@@ -616,7 +712,7 @@ qboolean M_CheckAttack(edict_t *self)
     }
 
     if (self->flags & FL_FLY) {
-        if (random() < 0.3)
+        if ((skill->value < 4) && (random() < 0.3))
             self->monsterinfo.attack_state = AS_SLIDING;
         else
             self->monsterinfo.attack_state = AS_STRAIGHT;
@@ -746,6 +842,12 @@ qboolean ai_checkattack(edict_t *self, float dist)
             if (self->enemy->health <= 0)
                 hesDeadJim = qtrue;
         }
+    }
+	
+    // pressed button is equal to killed
+    if (!hesDeadJim && self->enemy && (self->enemy->nextthink > 0)
+        && !strcmp(self->enemy->classname, "func_button")) {
+        hesDeadJim = qtrue; // useful when actor is set against it
     }
 
     if (hesDeadJim) {

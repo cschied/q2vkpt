@@ -193,6 +193,15 @@ void chick_walk(edict_t *self)
 
 void chick_run(edict_t *self)
 {
+    if (skill->value == 4) {
+        if (!self->targetname && !self->monsterinfo.aiflags){
+            self->monsterinfo.currentmove = &chick_move_stand;
+            if (!(self->monsterinfo.aiflags & AI_STAND_GROUND))
+                self->monsterinfo.aiflags |= AI_STAND_GROUND;
+            return;
+        }
+    }
+
     if (self->monsterinfo.aiflags & AI_STAND_GROUND) {
         self->monsterinfo.currentmove = &chick_move_stand;
         return;
@@ -269,8 +278,8 @@ void chick_pain(edict_t *self, edict_t *other, float kick, int damage)
     else
         gi.sound(self, CHAN_VOICE, sound_pain3, 1, ATTN_NORM, 0);
 
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     if (damage <= 10)
         self->monsterinfo.currentmove = &chick_move_pain1;
@@ -337,6 +346,9 @@ mmove_t chick_move_death1 = {FRAME_death101, FRAME_death112, chick_frames_death1
 void chick_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damage, vec3_t point)
 {
     int     n;
+
+    if (skill->value > 3)
+        VectorCopy(self->s.origin, self->monsterinfo.last_sighting);
 
 // check for gib
     if (self->health <= self->gib_health) {
@@ -408,7 +420,7 @@ mmove_t chick_move_duck = {FRAME_duck01, FRAME_duck07, chick_frames_duck, chick_
 
 void chick_dodge(edict_t *self, edict_t *attacker, float eta)
 {
-    if (random() > 0.25)
+    if ((skill->value > 3) || (random() > 0.25))
         return;
 
     if (!self->enemy)
@@ -423,7 +435,7 @@ void ChickSlash(edict_t *self)
 
     VectorSet(aim, MELEE_DISTANCE, self->mins[0], 10);
     gi.sound(self, CHAN_WEAPON, sound_melee_swing, 1, ATTN_NORM, 0);
-    fire_hit(self, aim, (10 + (rand() % 6)), 100);
+    fire_hit(self, aim, ((skill->value > 3)? 20 : 10) + (rand() % 6), 100);
 }
 
 
@@ -433,6 +445,7 @@ void ChickRocket(edict_t *self)
     vec3_t  start;
     vec3_t  dir;
     vec3_t  vec;
+    int     dmg;
 
     AngleVectors(self->s.angles, forward, right, NULL);
     G_ProjectSource(self->s.origin, monster_flash_offset[MZ2_CHICK_ROCKET_1], forward, right, start);
@@ -442,7 +455,11 @@ void ChickRocket(edict_t *self)
     VectorSubtract(vec, start, dir);
     VectorNormalize(dir);
 
-    monster_fire_rocket(self, start, dir, 50, 500, MZ2_CHICK_ROCKET_1);
+    dmg = 50;
+    if (skill->value > 3)
+        dmg *= 1.25; // 25% more damage for monsters
+
+    monster_fire_rocket(self, start, dir, dmg, 500, MZ2_CHICK_ROCKET_1);
 }
 
 void Chick_PreAttack1(edict_t *self)
@@ -507,7 +524,7 @@ void chick_rerocket(edict_t *self)
     if (self->enemy->health > 0) {
         if (range(self, self->enemy) > RANGE_MELEE)
             if (visible(self, self->enemy))
-                if (random() <= 0.6) {
+                if ((skill->value > 3) || (random() <= 0.6)) {
                     self->monsterinfo.currentmove = &chick_move_attack1;
                     return;
                 }
@@ -546,7 +563,7 @@ void chick_reslash(edict_t *self)
 {
     if (self->enemy->health > 0) {
         if (range(self, self->enemy) == RANGE_MELEE) {
-            if (random() <= 0.9) {
+            if ((skill->value > 3) || (random() <= 0.9)) {
                 self->monsterinfo.currentmove = &chick_move_slash;
                 return;
             } else {
@@ -623,6 +640,11 @@ void SP_monster_chick(edict_t *self)
     self->health = 175;
     self->gib_health = -70;
     self->mass = 200;
+
+    if (skill->value > 3) {
+        self->health *= 1.25; // 25% more health for monsters
+        self->gib_health *= 1.25;
+    }
 
     self->pain = chick_pain;
     self->die = chick_die;

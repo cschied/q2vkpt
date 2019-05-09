@@ -269,8 +269,8 @@ void parasite_pain(edict_t *self, edict_t *other, float kick, int damage)
 
     self->pain_debounce_time = level.time + 3;
 
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     if (random() < 0.5)
         gi.sound(self, CHAN_VOICE, sound_pain1, 1, ATTN_NORM, 0);
@@ -326,12 +326,12 @@ void parasite_drain_attack(edict_t *self)
         return;
 
     if (self->s.frame == FRAME_drain03) {
-        damage = 5;
+        damage = ((skill->value == 4) ? 10 : 5);
         gi.sound(self->enemy, CHAN_AUTO, sound_impact, 1, ATTN_NORM, 0);
     } else {
         if (self->s.frame == FRAME_drain04)
             gi.sound(self, CHAN_WEAPON, sound_suck, 1, ATTN_NORM, 0);
-        damage = 2;
+        damage = ((skill->value == 4) ? 5 : 2);
     }
 
     gi.WriteByte(svc_temp_entity);
@@ -451,6 +451,9 @@ void parasite_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int dama
 {
     int     n;
 
+    if (skill->value == 4)
+        VectorCopy(self->s.origin, self->monsterinfo.last_sighting);
+
 // check for gib
     if (self->health <= self->gib_health) {
         gi.sound(self, CHAN_VOICE, gi.soundindex("misc/udeath.wav"), 1, ATTN_NORM, 0);
@@ -509,6 +512,11 @@ void SP_monster_parasite(edict_t *self)
     self->health = 175;
     self->gib_health = -50;
     self->mass = 250;
+
+    if (skill->value == 4) {
+        self->health *= 1.25; // in hell mode 25% hp more for monsters
+        self->gib_health *= 1.25;
+    }
 
     self->pain = parasite_pain;
     self->die = parasite_die;

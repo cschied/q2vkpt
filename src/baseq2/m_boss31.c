@@ -226,6 +226,16 @@ void jorg_walk(edict_t *self)
 
 void jorg_run(edict_t *self)
 {
+// it's buggy when makron spawn!
+    /*if (skill->value == 4) {
+        if (!self->targetname && !self->monsterinfo.aiflags){
+            self->monsterinfo.currentmove = &jorg_move_stand;
+            if (!(self->monsterinfo.aiflags & AI_STAND_GROUND))
+                self->monsterinfo.aiflags |= AI_STAND_GROUND;
+            return;
+        }
+    }*/
+
     if (self->monsterinfo.aiflags & AI_STAND_GROUND)
         self->monsterinfo.currentmove = &jorg_move_stand;
     else
@@ -379,7 +389,7 @@ mmove_t jorg_move_end_attack1 = {FRAME_attak115, FRAME_attak118, jorg_frames_end
 void jorg_reattack1(edict_t *self)
 {
     if (visible(self, self->enemy))
-        if (random() < 0.9)
+        if (((skill->value > 3) && (self->enemy->health > 0)) || (random() < 0.9))
             self->monsterinfo.currentmove = &jorg_move_attack1;
         else {
             self->s.sound = 0;
@@ -432,8 +442,8 @@ void jorg_pain(edict_t *self, edict_t *other, float kick, int damage)
 
 
     self->pain_debounce_time = level.time + 3;
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     if (damage <= 50) {
         gi.sound(self, CHAN_VOICE, sound_pain1, 1, ATTN_NORM, 0);
@@ -455,6 +465,7 @@ void jorgBFG(edict_t *self)
     vec3_t  start;
     vec3_t  dir;
     vec3_t  vec;
+    int     dmg;
 
     AngleVectors(self->s.angles, forward, right, NULL);
     G_ProjectSource(self->s.origin, monster_flash_offset[MZ2_JORG_BFG_1], forward, right, start);
@@ -472,13 +483,20 @@ void jorgBFG(edict_t *self)
                              int kick,
                              float damage_radius,
                              int flashtype)*/
-    monster_fire_bfg(self, start, dir, 50, 300, 100, 200, MZ2_JORG_BFG_1);
+
+    dmg = 50;
+    if (skill->value > 3) {
+        dmg *= 1.25; // 25% more damage for monsters
+    }
+
+    monster_fire_bfg(self, start, dir, dmg, 300, 100, 200, MZ2_JORG_BFG_1);
 }
 
 void jorg_firebullet_right(edict_t *self)
 {
     vec3_t  forward, right, target;
     vec3_t  start;
+    int     dmg;
 
     AngleVectors(self->s.angles, forward, right, NULL);
     G_ProjectSource(self->s.origin, monster_flash_offset[MZ2_JORG_MACHINEGUN_R1], forward, right, start);
@@ -488,13 +506,16 @@ void jorg_firebullet_right(edict_t *self)
     VectorSubtract(target, start, forward);
     VectorNormalize(forward);
 
-    monster_fire_bullet(self, start, forward, 6, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, MZ2_JORG_MACHINEGUN_R1);
+    dmg = ((skill->value > 3)? 8 : 6);
+
+    monster_fire_bullet(self, start, forward, dmg, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, MZ2_JORG_MACHINEGUN_R1);
 }
 
 void jorg_firebullet_left(edict_t *self)
 {
     vec3_t  forward, right, target;
     vec3_t  start;
+    int     dmg;
 
     AngleVectors(self->s.angles, forward, right, NULL);
     G_ProjectSource(self->s.origin, monster_flash_offset[MZ2_JORG_MACHINEGUN_L1], forward, right, start);
@@ -504,7 +525,9 @@ void jorg_firebullet_left(edict_t *self)
     VectorSubtract(target, start, forward);
     VectorNormalize(forward);
 
-    monster_fire_bullet(self, start, forward, 6, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, MZ2_JORG_MACHINEGUN_L1);
+    dmg = ((skill->value > 3)? 8 : 6);
+
+    monster_fire_bullet(self, start, forward, dmg, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, MZ2_JORG_MACHINEGUN_L1);
 }
 
 void jorg_firebullet(edict_t *self)
@@ -515,7 +538,13 @@ void jorg_firebullet(edict_t *self)
 
 void jorg_attack(edict_t *self)
 {
-    if (random() <= 0.75) {
+    vec3_t  vec;
+    float   range;
+
+    VectorSubtract(self->enemy->s.origin, self->s.origin, vec);
+    range = VectorLength(vec);
+
+    if (((skill->value < 4) || (range < 200)) && (random() <= 0.75)) {
         gi.sound(self, CHAN_VOICE, sound_attack1, 1, ATTN_NORM, 0);
         self->s.sound = gi.soundindex("boss3/w_loop.wav");
         self->monsterinfo.currentmove = &jorg_move_start_attack1;
@@ -632,7 +661,7 @@ qboolean Jorg_CheckAttack(edict_t *self)
     }
 
     if (self->flags & FL_FLY) {
-        if (random() < 0.3)
+        if ((skill->value < 4) && (random() < 0.3))
             self->monsterinfo.attack_state = AS_SLIDING;
         else
             self->monsterinfo.attack_state = AS_STRAIGHT;
@@ -680,6 +709,11 @@ void SP_monster_jorg(edict_t *self)
     self->health = 3000;
     self->gib_health = -2000;
     self->mass = 1000;
+
+    if (skill->value > 3) {
+        self->health *= 1.25; // 25% more health for monsters
+        self->gib_health *= 1.25;
+    }
 
     self->pain = jorg_pain;
     self->die = jorg_die;

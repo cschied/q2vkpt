@@ -56,8 +56,17 @@ void Boss2Rocket(edict_t *self)
     vec3_t  start;
     vec3_t  dir;
     vec3_t  vec;
+    int     dmg;
 
     AngleVectors(self->s.angles, forward, right, NULL);
+
+    dmg = 50;
+    if (skill->value > 3) {
+        dmg *= 1.25; // 25% more damage for monsters
+        if ((self->enemy->health > 0) && infront(self, self->enemy) &&
+            visible(self, self->enemy) && (range(self, self->enemy) != RANGE_MELEE))
+            self->monsterinfo.nextframe = FRAME_attack6;
+    }
 
 //1
     G_ProjectSource(self->s.origin, monster_flash_offset[MZ2_BOSS2_ROCKET_1], forward, right, start);
@@ -65,7 +74,7 @@ void Boss2Rocket(edict_t *self)
     vec[2] += self->enemy->viewheight;
     VectorSubtract(vec, start, dir);
     VectorNormalize(dir);
-    monster_fire_rocket(self, start, dir, 50, 500, MZ2_BOSS2_ROCKET_1);
+    monster_fire_rocket(self, start, dir, dmg, 500, MZ2_BOSS2_ROCKET_1);
 
 //2
     G_ProjectSource(self->s.origin, monster_flash_offset[MZ2_BOSS2_ROCKET_2], forward, right, start);
@@ -73,7 +82,7 @@ void Boss2Rocket(edict_t *self)
     vec[2] += self->enemy->viewheight;
     VectorSubtract(vec, start, dir);
     VectorNormalize(dir);
-    monster_fire_rocket(self, start, dir, 50, 500, MZ2_BOSS2_ROCKET_2);
+    monster_fire_rocket(self, start, dir, dmg, 500, MZ2_BOSS2_ROCKET_2);
 
 //3
     G_ProjectSource(self->s.origin, monster_flash_offset[MZ2_BOSS2_ROCKET_3], forward, right, start);
@@ -81,7 +90,7 @@ void Boss2Rocket(edict_t *self)
     vec[2] += self->enemy->viewheight;
     VectorSubtract(vec, start, dir);
     VectorNormalize(dir);
-    monster_fire_rocket(self, start, dir, 50, 500, MZ2_BOSS2_ROCKET_3);
+    monster_fire_rocket(self, start, dir, dmg, 500, MZ2_BOSS2_ROCKET_3);
 
 //4
     G_ProjectSource(self->s.origin, monster_flash_offset[MZ2_BOSS2_ROCKET_4], forward, right, start);
@@ -89,13 +98,14 @@ void Boss2Rocket(edict_t *self)
     vec[2] += self->enemy->viewheight;
     VectorSubtract(vec, start, dir);
     VectorNormalize(dir);
-    monster_fire_rocket(self, start, dir, 50, 500, MZ2_BOSS2_ROCKET_4);
+    monster_fire_rocket(self, start, dir, dmg, 500, MZ2_BOSS2_ROCKET_4);
 }
 
 void boss2_firebullet_right(edict_t *self)
 {
     vec3_t  forward, right, target;
     vec3_t  start;
+    int     dmg;
 
     AngleVectors(self->s.angles, forward, right, NULL);
     G_ProjectSource(self->s.origin, monster_flash_offset[MZ2_BOSS2_MACHINEGUN_R1], forward, right, start);
@@ -105,13 +115,16 @@ void boss2_firebullet_right(edict_t *self)
     VectorSubtract(target, start, forward);
     VectorNormalize(forward);
 
-    monster_fire_bullet(self, start, forward, 6, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, MZ2_BOSS2_MACHINEGUN_R1);
+    dmg = ((skill->value > 3)? 8 : 6);
+
+    monster_fire_bullet(self, start, forward, dmg, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, MZ2_BOSS2_MACHINEGUN_R1);
 }
 
 void boss2_firebullet_left(edict_t *self)
 {
     vec3_t  forward, right, target;
     vec3_t  start;
+    int     dmg;
 
     AngleVectors(self->s.angles, forward, right, NULL);
     G_ProjectSource(self->s.origin, monster_flash_offset[MZ2_BOSS2_MACHINEGUN_L1], forward, right, start);
@@ -122,7 +135,9 @@ void boss2_firebullet_left(edict_t *self)
     VectorSubtract(target, start, forward);
     VectorNormalize(forward);
 
-    monster_fire_bullet(self, start, forward, 6, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, MZ2_BOSS2_MACHINEGUN_L1);
+    dmg = ((skill->value > 3)? 8 : 6);
+
+    monster_fire_bullet(self, start, forward, dmg, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, MZ2_BOSS2_MACHINEGUN_L1);
 }
 
 void Boss2MachineGun(edict_t *self)
@@ -427,7 +442,8 @@ void boss2_attack(edict_t *self)
     if (range <= 125) {
         self->monsterinfo.currentmove = &boss2_move_attack_pre_mg;
     } else {
-        if (random() <= 0.6)
+        if (((skill->value > 3) && (self->enemy->s.origin[2] > self->s.origin[2])) ||
+            ((skill->value < 4) && (random() <= 0.6)))
             self->monsterinfo.currentmove = &boss2_move_attack_pre_mg;
         else
             self->monsterinfo.currentmove = &boss2_move_attack_rocket;
@@ -442,7 +458,7 @@ void boss2_attack_mg(edict_t *self)
 void boss2_reattack_mg(edict_t *self)
 {
     if (infront(self, self->enemy))
-        if (random() <= 0.7)
+        if (((skill->value > 3) && (self->enemy->health > 0)) || (random() <= 0.7))
             self->monsterinfo.currentmove = &boss2_move_attack_mg;
         else
             self->monsterinfo.currentmove = &boss2_move_attack_post_mg;
@@ -460,6 +476,9 @@ void boss2_pain(edict_t *self, edict_t *other, float kick, int damage)
         return;
 
     self->pain_debounce_time = level.time + 3;
+    if (skill->value > 3)
+        return;     // no pain anims in hell
+
 // American wanted these at no attenuation
     if (damage < 10) {
         gi.sound(self, CHAN_VOICE, sound_pain3, 1, ATTN_NONE, 0);
@@ -492,6 +511,9 @@ void boss2_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damage,
     self->monsterinfo.currentmove = &boss2_move_death;
 #if 0
     int     n;
+
+    if (skill->value > 3)
+        VectorCopy(self->s.origin, self->monsterinfo.last_sighting);
 
     self->s.sound = 0;
     // check for gib
@@ -576,14 +598,14 @@ qboolean Boss2_CheckAttack(edict_t *self)
         return qfalse;
     }
 
-    if (random() < chance) {
+    if ((skill->value < 4) || (random() < chance)) {
         self->monsterinfo.attack_state = AS_MISSILE;
         self->monsterinfo.attack_finished = level.time + 2 * random();
         return qtrue;
     }
 
     if (self->flags & FL_FLY) {
-        if (random() < 0.3)
+        if ((skill->value < 4) && (random() < 0.3))
             self->monsterinfo.attack_state = AS_SLIDING;
         else
             self->monsterinfo.attack_state = AS_STRAIGHT;
@@ -620,6 +642,11 @@ void SP_monster_boss2(edict_t *self)
     self->health = 2000;
     self->gib_health = -200;
     self->mass = 1000;
+
+    if (skill->value > 3) {
+        self->health *= 1.25; // 25% more health for monsters
+        self->gib_health *= 1.25;
+    }
 
     self->flags |= FL_IMMUNE_LASER;
 

@@ -368,7 +368,7 @@ void M_MoveFrame(edict_t *self)
 
     index = self->s.frame - move->firstframe;
     if (move->frame[index].aifunc) {
-        if (!(self->monsterinfo.aiflags & AI_HOLD_FRAME))
+        if (move->frame[index].dist && !(self->monsterinfo.aiflags & AI_HOLD_FRAME))
             move->frame[index].aifunc(self, move->frame[index].dist * self->monsterinfo.scale);
         else
             move->frame[index].aifunc(self, 0);
@@ -407,7 +407,7 @@ void monster_use(edict_t *self, edict_t *other, edict_t *activator)
         return;
     if (activator->flags & FL_NOTARGET)
         return;
-    if (!(activator->client) && !(activator->monsterinfo.aiflags & AI_GOOD_GUY))
+    if (!(activator->client) && !IS_GOOD_GUY(activator))
         return;
 
 // delay reaction so if the monster is teleported, its sound is still heard
@@ -421,6 +421,8 @@ void monster_start_go(edict_t *self);
 
 void monster_triggered_spawn(edict_t *self)
 {
+    extern void actor_use (edict_t *self, edict_t *other, edict_t *activator);
+
     self->s.origin[2] += 1;
     KillBox(self);
 
@@ -437,6 +439,11 @@ void monster_triggered_spawn(edict_t *self)
     } else {
         self->enemy = NULL;
     }
+
+    if (IS_ACTOR(self)) {
+        self->use = actor_use;
+        self->use(self, self->enemy, NULL);
+    }
 }
 
 void monster_triggered_spawn_use(edict_t *self, edict_t *other, edict_t *activator)
@@ -444,7 +451,7 @@ void monster_triggered_spawn_use(edict_t *self, edict_t *other, edict_t *activat
     // we have a one frame delay here so we don't telefrag the guy who activated us
     self->think = monster_triggered_spawn;
     self->nextthink = level.time + FRAMETIME;
-    if (activator->client)
+    if (activator->client && !IS_PLAYER_ALLY(self))
         self->enemy = activator;
     self->use = monster_use;
 }
@@ -496,13 +503,13 @@ qboolean monster_start(edict_t *self)
         return qfalse;
     }
 
-    if ((self->spawnflags & 4) && !(self->monsterinfo.aiflags & AI_GOOD_GUY)) {
+    if ((self->spawnflags & 4) && !IS_GOOD_GUY(self)) {
         self->spawnflags &= ~4;
         self->spawnflags |= 1;
 //      gi.dprintf("fixed spawnflags on %s at %s\n", self->classname, vtos(self->s.origin));
     }
 
-    if (!(self->monsterinfo.aiflags & AI_GOOD_GUY))
+    if (!IS_GOOD_GUY(self))
         level.total_monsters++;
 
     self->nextthink = level.time + FRAMETIME;
@@ -514,7 +521,8 @@ qboolean monster_start(edict_t *self)
     self->max_health = self->health;
     self->clipmask = MASK_MONSTERSOLID;
 
-    self->s.skinnum = 0;
+    if (!IS_ACTOR(self))
+        self->s.skinnum = 0;
     self->deadflag = DEAD_NO;
     self->svflags &= ~SVF_DEADMONSTER;
 

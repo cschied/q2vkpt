@@ -272,7 +272,9 @@ void mutant_check_refire(edict_t *self)
     if (!self->enemy || !self->enemy->inuse || self->enemy->health <= 0)
         return;
 
-    if (((skill->value == 3) && (random() < 0.5)) || (range(self, self->enemy) == RANGE_MELEE))
+    if (((skill->value == 4) && (range(self, self->enemy) == RANGE_MELEE)) ||
+        ((skill->value == 3) && (random() < 0.5)) ||
+        (range(self, self->enemy) == RANGE_MELEE))
         self->monsterinfo.nextframe = FRAME_attack09;
 }
 
@@ -313,7 +315,12 @@ void mutant_jump_touch(edict_t *self, edict_t *other, cplane_t *plane, csurface_
             VectorCopy(self->velocity, normal);
             VectorNormalize(normal);
             VectorMA(self->s.origin, self->maxs[0], normal, point);
-            damage = 40 + 10 * random();
+            damage = 40 + 10 *
+                ((skill->value == 4)? (random() * 1.25) : random());
+
+            if (skill->value == 4)
+                damage *= 1.25; // 25% more damage
+
             T_Damage(other, self, self, self->velocity, point, normal, damage, damage, 0, MOD_UNKNOWN);
         }
     }
@@ -393,7 +400,8 @@ qboolean mutant_check_jump(edict_t *self)
     vec3_t  v;
     float   distance;
 
-    if (self->absmin[2] > (self->enemy->absmin[2] + 0.75 * self->enemy->size[2]))
+    if ((skill->value < 4) &&
+        (self->absmin[2] > (self->enemy->absmin[2] + 0.75 * self->enemy->size[2])))
         return qfalse;
 
     if (self->absmax[2] < (self->enemy->absmin[2] + 0.25 * self->enemy->size[2]))
@@ -407,7 +415,7 @@ qboolean mutant_check_jump(edict_t *self)
     if (distance < 100)
         return qfalse;
     if (distance > 100) {
-        if (random() < 0.9)
+        if ((skill->value < 4) && (random() < 0.9))
             return qfalse;
     }
 
@@ -484,8 +492,8 @@ void mutant_pain(edict_t *self, edict_t *other, float kick, int damage)
 
     self->pain_debounce_time = level.time + 3;
 
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     r = random();
     if (r < 0.33) {
@@ -546,6 +554,9 @@ mmove_t mutant_move_death2 = {FRAME_death201, FRAME_death210, mutant_frames_deat
 void mutant_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damage, vec3_t point)
 {
     int     n;
+
+    if (skill->value == 4)
+        VectorCopy(self->s.origin, self->monsterinfo.last_sighting);
 
     if (self->health <= self->gib_health) {
         gi.sound(self, CHAN_VOICE, gi.soundindex("misc/udeath.wav"), 1, ATTN_NORM, 0);
@@ -609,6 +620,11 @@ void SP_monster_mutant(edict_t *self)
     self->health = 300;
     self->gib_health = -120;
     self->mass = 300;
+
+    if (skill->value == 4) {
+        self->health *= 1.25; // in hell mode 25% hp more for monsters
+        self->gib_health *= 1.25;
+    }
 
     self->pain = mutant_pain;
     self->die = mutant_die;

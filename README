@@ -8,7 +8,8 @@ Improvements:
 - unlocked drop/get/spawn weapon blaster,
 - unlocked spawn monster makron,
 - fixed repeating monster sights when player is dead,
-- added new game skill "hell".
+- added new game skill "hell",
+- turned off scream sounds when player is in god mode and he's sinking and drown in the lava.
 
 Base fixes/changes only in hell mode/skill:
 - fixed monster medic thinking before looking for a dead monster,

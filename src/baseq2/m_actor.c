@@ -20,6 +20,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "g_local.h"
 #include "m_actor.h"
 
+#define WAIT_ONCE           8
 #define MAX_ACTOR_NAMES     8
 char *actor_names[MAX_ACTOR_NAMES] = {
     "Hellrot",
@@ -78,7 +79,7 @@ mframe_t actor_frames_stand [] = {
     { ai_stand, 0, NULL },
     { ai_stand, 0, NULL }
 };
-mmove_t actor_move_stand = {FRAME_stand101, FRAME_stand140, actor_frames_stand, NULL};
+mmove_t actor_move_stand = {FRAME_stand01, FRAME_stand40, actor_frames_stand, NULL};
 
 void actor_stand(edict_t *self)
 {
@@ -87,6 +88,76 @@ void actor_stand(edict_t *self)
     // randomize on startup
     if (level.time < 1.0)
         self->s.frame = self->monsterinfo.currentmove->firstframe + (rand() % (self->monsterinfo.currentmove->lastframe - self->monsterinfo.currentmove->firstframe + 1));
+}
+
+void actor_duck_down(edict_t *self)
+{
+    if (self->monsterinfo.aiflags & AI_DUCKED)
+        return;
+    self->monsterinfo.aiflags |= AI_DUCKED;
+    self->maxs[2] -= 32;
+    self->takedamage = DAMAGE_YES;
+    self->monsterinfo.pausetime = level.time + 1;
+    gi.linkentity (self);
+}
+
+void actor_duck_hold(edict_t *self)
+{
+    if (level.time >= self->monsterinfo.pausetime)
+        self->monsterinfo.aiflags &= ~AI_HOLD_FRAME;
+    else
+        self->monsterinfo.aiflags |= AI_HOLD_FRAME;
+}
+
+void actor_duck_up(edict_t *self)
+{
+    self->monsterinfo.aiflags &= ~AI_DUCKED;
+    self->maxs[2] += 32;
+    self->takedamage = DAMAGE_AIM;
+    gi.linkentity (self);
+}
+
+void actor_run(edict_t *self);
+
+mframe_t actor_frames_duck[] =
+{
+    ai_move, -2, actor_duck_down,
+    ai_move, -5, actor_duck_hold,
+    ai_move, 0, NULL,
+    ai_move, 0, NULL,
+    ai_move, 0, NULL,
+    ai_move, 0, NULL,
+    ai_move, 0, NULL,
+    ai_move, 0, NULL,
+    ai_move, 0, NULL,
+    ai_move, 0, NULL,
+
+    ai_move, 0, NULL,
+    ai_move, 0, NULL,
+    ai_move, 0, NULL,
+    ai_move, 0, NULL,
+    ai_move, 0, NULL,
+    ai_move, 0, NULL,
+    ai_move, 3, NULL,
+    ai_move, 4, actor_duck_up,
+    ai_move, 0, NULL,
+    ai_move, 0, NULL
+};
+mmove_t actor_move_duck = { FRAME_crstnd01, FRAME_crstnd19, actor_frames_duck, actor_run };
+
+/* Defined actor_dodge method is an additional functionality (warning: isn't tested yet)
+   TODO: allow crouched actor to shoots enemies in the same time.
+*/
+
+void actor_dodge(edict_t *self, edict_t *attacker, float eta)
+{
+    if ((skill->value == 4) || (random () > 0.25))
+        return;
+
+    if (!self->enemy && (!IS_PLAYER_ALLY(attacker) || (self->health < 25)))
+        self->enemy = attacker;
+
+    self->monsterinfo.currentmove = &actor_move_duck;
 }
 
 
@@ -103,7 +174,7 @@ mframe_t actor_frames_walk [] = {
     { ai_walk, 0,  NULL },
     { ai_walk, 0,  NULL }
 };
-mmove_t actor_move_walk = {FRAME_walk01, FRAME_walk08, actor_frames_walk, NULL};
+mmove_t actor_move_walk = {FRAME_crwalk1, FRAME_crwalk6, actor_frames_walk, NULL};
 
 void actor_walk(edict_t *self)
 {
@@ -125,10 +196,18 @@ mframe_t actor_frames_run [] = {
     { ai_run, -2, NULL },
     { ai_run, -1, NULL }
 };
-mmove_t actor_move_run = {FRAME_run02, FRAME_run07, actor_frames_run, NULL};
+mmove_t actor_move_run = {FRAME_run1, FRAME_run6, actor_frames_run, NULL};
 
 void actor_run(edict_t *self)
 {
+    // shoot
+    if (self->monsterinfo.aiflags & AI_SHOOT_ONCE){
+        self->monsterinfo.aiflags &= ~AI_SHOOT_ONCE;
+        self->goalentity = NULL;
+        self->enemy = self->oldenemy; // actor is forced to change target
+        self->oldenemy = NULL;
+    }
+    
     if ((level.time < self->pain_debounce_time) && (!self->enemy)) {
         if (self->movetarget)
             actor_walk(self);
@@ -183,7 +262,7 @@ mframe_t actor_frames_flipoff [] = {
     { ai_turn, 0,  NULL },
     { ai_turn, 0,  NULL }
 };
-mmove_t actor_move_flipoff = {FRAME_flip01, FRAME_flip14, actor_frames_flipoff, actor_run};
+mmove_t actor_move_flipoff = {FRAME_flip01, FRAME_flip12, actor_frames_flipoff, actor_run};
 
 mframe_t actor_frames_taunt [] = {
     { ai_turn, 0,  NULL },
@@ -215,16 +294,27 @@ char *messages[] = {
 
 void actor_pain(edict_t *self, edict_t *other, float kick, int damage)
 {
-    int     n;
+    int     n, l, r;
 
-    if (self->health < (self->max_health / 2))
-        self->s.skinnum = 1;
+    // cannot change skin even when actor is close to death
+    //if (self->health < (self->max_health / 2))
+    //    self->s.skinnum = 1;
 
     if (level.time < self->pain_debounce_time)
         return;
 
     self->pain_debounce_time = level.time + 3;
-//  gi.sound (self, CHAN_VOICE, actor.sound_pain, 1, ATTN_NORM, 0);
+    
+    r = 1 + (rand() & 1); // define standard pain sounds
+    if (self->health < 25)
+        l = 25;
+    else if (self->health < 50)
+        l = 50;
+    else if (self->health < 75)
+        l = 75;
+    else
+        l = 100;
+    gi.sound (self, CHAN_VOICE, gi.soundindex (va ("*pain%i_%i.wav", l, r)), 1, ATTN_NORM, 0);
 
     if ((other->client) && (random() < 0.4)) {
         vec3_t  v;
@@ -294,7 +384,7 @@ mframe_t actor_frames_death1 [] = {
     { ai_move, -2,  NULL },
     { ai_move, 1,   NULL }
 };
-mmove_t actor_move_death1 = {FRAME_death101, FRAME_death107, actor_frames_death1, actor_dead};
+mmove_t actor_move_death1 = {FRAME_death101, FRAME_death106, actor_frames_death1, actor_dead};
 
 mframe_t actor_frames_death2 [] = {
     { ai_move, 0,   NULL },
@@ -311,15 +401,39 @@ mframe_t actor_frames_death2 [] = {
     { ai_move, -13, NULL },
     { ai_move, 0,   NULL }
 };
-mmove_t actor_move_death2 = {FRAME_death201, FRAME_death213, actor_frames_death2, actor_dead};
+mmove_t actor_move_death2 = {FRAME_death201, FRAME_death206, actor_frames_death2, actor_dead};
+
+mframe_t actor_frames_death3 [] = {
+    { ai_move, 0,   NULL },
+    { ai_move, 0,   NULL },
+    { ai_move, 0,    NULL },
+    { ai_move, 0,    NULL },
+    { ai_move, 0,   NULL },
+    { ai_move, 0,   NULL },
+    { ai_move, 0,   NULL },
+    { ai_move, 0,   NULL }
+};
+mmove_t actor_move_death3 = {FRAME_death301, FRAME_death308, actor_frames_death3, actor_dead};
 
 void actor_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damage, vec3_t point)
 {
     int     n;
 
+    self->s.modelindex2 = 0;    // remove linked weapon model
+
+    self->s.angles[0] = 0;
+    self->s.angles[2] = 0;
+
+    self->s.sound = 0;
+
+    if (skill->value == 4)
+        VectorCopy (self->s.origin, self->monsterinfo.last_sighting);
+
 // check for gib
     if (self->health <= -80) {
-//      gi.sound (self, CHAN_VOICE, actor.sound_gib, 1, ATTN_NORM, 0);
+        self->s.modelindex4 = 0;    // remove linked skin
+        
+        gi.sound(self, CHAN_BODY, gi.soundindex("misc/udeath.wav"), 1, ATTN_NORM, 0);
         for (n = 0; n < 2; n++)
             ThrowGib(self, "models/objects/gibs/bone/tris.md2", damage, GIB_ORGANIC);
         for (n = 0; n < 4; n++)
@@ -333,15 +447,17 @@ void actor_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damage,
         return;
 
 // regular death
-//  gi.sound (self, CHAN_VOICE, actor.sound_die, 1, ATTN_NORM, 0);
+    gi.sound (self, CHAN_VOICE, gi.soundindex (va ("*death%i.wav", (rand () % 4) + 1)), 1, ATTN_NORM, 0);
     self->deadflag = DEAD_DEAD;
     self->takedamage = DAMAGE_YES;
 
-    n = rand() % 2;
+    n = rand() % 3;
     if (n == 0)
         self->monsterinfo.currentmove = &actor_move_death1;
-    else
+    else if (n == 1)
         self->monsterinfo.currentmove = &actor_move_death2;
+    else
+        self->monsterinfo.currentmove = &actor_move_death3;
 }
 
 
@@ -359,16 +475,23 @@ mframe_t actor_frames_attack [] = {
     { ai_charge, -2,  actor_fire },
     { ai_charge, -2,  NULL },
     { ai_charge, 3,   NULL },
-    { ai_charge, 2,   NULL }
+    { ai_charge, 2,   NULL },
+    { ai_charge, 1,   NULL },
+    { ai_charge, 0,   NULL },
+    { ai_charge, 0,   NULL },
+    { ai_charge, 0,   NULL }
 };
-mmove_t actor_move_attack = {FRAME_attak01, FRAME_attak04, actor_frames_attack, actor_run};
+mmove_t actor_move_attack = {FRAME_attack1, FRAME_attack8, actor_frames_attack, actor_run};
 
 void actor_attack(edict_t *self)
 {
     int     n;
 
     self->monsterinfo.currentmove = &actor_move_attack;
-    n = (rand() & 15) + 3 + 7;
+    if (self->monsterinfo.aiflags & AI_SHOOT_ONCE) // set one shot
+        n = 1;
+    else
+        n = (rand() & 15) + 3 + 7;
     self->monsterinfo.pausetime = level.time + n * FRAMETIME;
 }
 
@@ -378,7 +501,7 @@ void actor_use(edict_t *self, edict_t *other, edict_t *activator)
     vec3_t      v;
 
     self->goalentity = self->movetarget = G_PickTarget(self->target);
-    if ((!self->movetarget) || (strcmp(self->movetarget->classname, "target_actor") != 0)) {
+    if ((!self->movetarget) || IS_ACTOR(self->movetarget)) {
         gi.dprintf("%s has bad target %s at %s\n", self->classname, self->target, vtos(self->s.origin));
         self->target = NULL;
         self->monsterinfo.pausetime = 100000000;
@@ -417,7 +540,20 @@ void SP_misc_actor(edict_t *self)
 
     self->movetype = MOVETYPE_STEP;
     self->solid = SOLID_BBOX;
-    self->s.modelindex = gi.modelindex("players/male/tris.md2");
+    self->model = "players/male/tris.md2"; // only grunt available
+    self->s.effects = 0;
+    self->s.modelindex = gi.modelindex(self->model);
+    self->s.modelindex2 = gi.modelindex("players/male/w_chaingun.md2"); // set default weapon
+    self->s.modelindex3 = 0;
+    self->s.modelindex4 = 255; // this allow to take random skin
+    self->s.skinnum = rand(); // set one of them
+    self->s.frame = 0;
+    self->s.renderfx = 0;
+    self->waterlevel = 0;
+    self->watertype = 0;
+    self->groundentity = NULL;
+    self->flags &= ~FL_NO_KNOCKBACK;
+
     VectorSet(self->mins, -16, -16, -24);
     VectorSet(self->maxs, 16, 16, 32);
 
@@ -431,6 +567,8 @@ void SP_misc_actor(edict_t *self)
     self->monsterinfo.stand = actor_stand;
     self->monsterinfo.walk = actor_walk;
     self->monsterinfo.run = actor_run;
+    // actor may crouch?
+    // self->monsterinfo.dodge = actor_dodge;
     self->monsterinfo.attack = actor_attack;
     self->monsterinfo.melee = NULL;
     self->monsterinfo.sight = NULL;
@@ -474,9 +612,12 @@ void target_actor_touch(edict_t *self, edict_t *other, cplane_t *plane, csurface
     if (other->enemy)
         return;
 
-    other->goalentity = other->movetarget = NULL;
+    // actor is waiting?
+    if (!self->wait || (other->spawnflags & WAIT_ONCE))
+        other->goalentity = other->movetarget = NULL;
 
-    if (self->message) {
+    // actor say something before activation target?
+    if (self->message && !(other->spawnflags & WAIT_ONCE)) {
         int     n;
         edict_t *ent;
 
@@ -488,6 +629,16 @@ void target_actor_touch(edict_t *self, edict_t *other, cplane_t *plane, csurface
         }
     }
 
+    // wait moment if is defined
+    if (self->wait && !(other->spawnflags & WAIT_ONCE)) {
+        other->monsterinfo.pausetime = level.time + self->wait;
+        other->monsterinfo.stand (other);
+        other->spawnflags |= WAIT_ONCE;
+        return;
+    }
+
+    other->spawnflags &= ~WAIT_ONCE; // clear waiting flag
+
     if (self->spawnflags & 1) {     //jump
         other->velocity[0] = self->movedir[0] * self->speed;
         other->velocity[1] = self->movedir[1] * self->speed;
@@ -495,12 +646,12 @@ void target_actor_touch(edict_t *self, edict_t *other, cplane_t *plane, csurface
         if (other->groundentity) {
             other->groundentity = NULL;
             other->velocity[2] = self->movedir[2];
-            gi.sound(other, CHAN_VOICE, gi.soundindex("player/male/jump1.wav"), 1, ATTN_NORM, 0);
+            gi.sound(other, CHAN_VOICE, gi.soundindex("*jump1.wav"), 1, ATTN_NORM, 0);
         }
     }
 
-    if (self->spawnflags & 2) { //shoot
-    } else if (self->spawnflags & 4) { //attack
+    if ((self->spawnflags & 2) || //shoot
+        (self->spawnflags & 4)) { //attack
         other->enemy = G_PickTarget(self->pathtarget);
         if (other->enemy) {
             other->goalentity = other->enemy;
@@ -508,9 +659,13 @@ void target_actor_touch(edict_t *self, edict_t *other, cplane_t *plane, csurface
                 other->monsterinfo.aiflags |= AI_BRUTAL;
             if (self->spawnflags & 16) {
                 other->monsterinfo.aiflags |= AI_STAND_GROUND;
-                actor_stand(other);
+                other->monsterinfo.stand(other);
+            // FIXME: cannot hit invisible target (eg hitable func_button --> use attack)
+            } else if (self->spawnflags & 2) {
+                other->monsterinfo.aiflags |= AI_SHOOT_ONCE;
+                other->monsterinfo.attack(other);
             } else {
-                actor_run(other);
+                other->monsterinfo.run(other);
             }
         }
     }

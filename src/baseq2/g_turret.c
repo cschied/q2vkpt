@@ -326,7 +326,7 @@ void turret_driver_think(edict_t *self)
     if (level.time < self->monsterinfo.attack_finished)
         return;
 
-    reaction_time = (3 - skill->value) * 1.0;
+    reaction_time = ((skill->value == 4)? 0.0 : (3 - skill->value) * 1.0);
     if ((level.time - self->monsterinfo.trail_time) < reaction_time)
         return;
 

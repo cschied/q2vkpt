@@ -514,7 +514,7 @@ mframe_t brain_frames_run [] =
 mmove_t brain_move_run = {FRAME_walk101, FRAME_walk111, brain_frames_run, NULL};
 
 void brain_run(edict_t *self) {
-    if (self->s.frame == FRAME_attak117)
+    if ((self->s.frame == FRAME_attak117) && (self->enemy->health > 0)) // reattack when target still alive
         if (skill->value > 3) {
             if (range(self, self->enemy) == RANGE_MELEE)
                 self->monsterinfo.nextframe = FRAME_attak102;

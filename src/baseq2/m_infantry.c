@@ -403,7 +403,7 @@ void infantry_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int dama
     self->deadflag = DEAD_DEAD;
     self->takedamage = DAMAGE_YES;
 
-    n = rand() % 3;
+    n = ((skill->value > 3)? 1 : (rand() % 3)); // infantry always is trying to kill killer after die
     if (n == 0) {
         self->monsterinfo.currentmove = &infantry_move_death1;
         gi.sound(self, CHAN_VOICE, sound_die2, 1, ATTN_NORM, 0);

@@ -65,7 +65,7 @@ void Boss2Rocket(edict_t *self)
         dmg *= 1.25; // 25% more damage for monsters
         if ((self->enemy->health > 0) && infront(self, self->enemy) &&
             visible(self, self->enemy) && (range(self, self->enemy) != RANGE_MELEE))
-            self->s.frame = FRAME_attack6;
+            self->monsterinfo.nextframe = FRAME_attack6;
     }
 
 //1

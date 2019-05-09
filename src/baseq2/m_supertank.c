@@ -504,12 +504,12 @@ void supertankRocket(edict_t *self)
     dmg = 50;
     if (skill->value > 3) {
         dmg *= 1.25; // 25% more damage
-        // supertank will not stop fire rockets
+        // supertank will not stop fire rockets until:
         if ((self->s.frame == FRAME_attak2_14) && infront(self, self->enemy) &&
             visible(self, self->enemy) && (self->enemy->health > 0)){
             // fastest way to refire rockets
-            self->s.frame = FRAME_attak2_9;
-            //self->monsterinfo.currentmove = &supertank_move_attack2;
+            self->monsterinfo.nextframe = FRAME_attak2_9; // FIXME: prevent firing rockets when player is in wide angle
+            //self->monsterinfo.currentmove = &supertank_move_attack2; // too slow
         }
     }
 

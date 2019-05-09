@@ -517,9 +517,9 @@ void brain_run(edict_t *self) {
     if (self->s.frame == FRAME_attak117)
         if (skill->value > 3) {
             if (range(self, self->enemy) == RANGE_MELEE)
-                self->s.frame = FRAME_attak102;
+                self->monsterinfo.nextframe = FRAME_attak102;
             else {
-                self->s.frame = FRAME_attak205;
+                self->monsterinfo.nextframe = FRAME_attak205; // fastest way to open chest
                 self->monsterinfo.currentmove = &brain_move_attack2;
             }
             return;

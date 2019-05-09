@@ -90,7 +90,7 @@ void actor_stand(edict_t *self)
         self->s.frame = self->monsterinfo.currentmove->firstframe + (rand() % (self->monsterinfo.currentmove->lastframe - self->monsterinfo.currentmove->firstframe + 1));
 }
 
-void actor_duck_down (edict_t *self)
+void actor_duck_down(edict_t *self)
 {
     if (self->monsterinfo.aiflags & AI_DUCKED)
         return;
@@ -101,7 +101,7 @@ void actor_duck_down (edict_t *self)
     gi.linkentity (self);
 }
 
-void actor_duck_hold (edict_t *self)
+void actor_duck_hold(edict_t *self)
 {
     if (level.time >= self->monsterinfo.pausetime)
         self->monsterinfo.aiflags &= ~AI_HOLD_FRAME;
@@ -109,7 +109,7 @@ void actor_duck_hold (edict_t *self)
         self->monsterinfo.aiflags |= AI_HOLD_FRAME;
 }
 
-void actor_duck_up (edict_t *self)
+void actor_duck_up(edict_t *self)
 {
     self->monsterinfo.aiflags &= ~AI_DUCKED;
     self->maxs[2] += 32;
@@ -117,7 +117,7 @@ void actor_duck_up (edict_t *self)
     gi.linkentity (self);
 }
 
-void actor_run (edict_t *self);
+void actor_run(edict_t *self);
 
 mframe_t actor_frames_duck[] =
 {
@@ -145,7 +145,11 @@ mframe_t actor_frames_duck[] =
 };
 mmove_t actor_move_duck = { FRAME_crstnd01, FRAME_crstnd19, actor_frames_duck, actor_run };
 
-void actor_dodge (edict_t *self, edict_t *attacker, float eta)
+/* Defined actor_dodge method is an additional functionality (warning: isn't tested yet)
+   TODO: allow crouched actor to shoots enemies in the same time.
+*/
+
+void actor_dodge(edict_t *self, edict_t *attacker, float eta)
 {
     if ((skill->value == 4) || (random () > 0.25))
         return;
@@ -200,7 +204,7 @@ void actor_run(edict_t *self)
     if (self->monsterinfo.aiflags & AI_SHOOT_ONCE){
         self->monsterinfo.aiflags &= ~AI_SHOOT_ONCE;
         self->goalentity = NULL;
-        self->enemy = self->oldenemy;
+        self->enemy = self->oldenemy; // actor is forced to change target
         self->oldenemy = NULL;
     }
     
@@ -292,6 +296,7 @@ void actor_pain(edict_t *self, edict_t *other, float kick, int damage)
 {
     int     n, l, r;
 
+    // cannot change skin even when actor is close to death
     //if (self->health < (self->max_health / 2))
     //    self->s.skinnum = 1;
 
@@ -300,7 +305,7 @@ void actor_pain(edict_t *self, edict_t *other, float kick, int damage)
 
     self->pain_debounce_time = level.time + 3;
     
-    r = 1 + (rand() & 1);
+    r = 1 + (rand() & 1); // define standard pain sounds
     if (self->health < 25)
         l = 25;
     else if (self->health < 50)
@@ -483,7 +488,7 @@ void actor_attack(edict_t *self)
     int     n;
 
     self->monsterinfo.currentmove = &actor_move_attack;
-    if (self->monsterinfo.aiflags & AI_SHOOT_ONCE)
+    if (self->monsterinfo.aiflags & AI_SHOOT_ONCE) // set one shot
         n = 1;
     else
         n = (rand() & 15) + 3 + 7;
@@ -535,13 +540,13 @@ void SP_misc_actor(edict_t *self)
 
     self->movetype = MOVETYPE_STEP;
     self->solid = SOLID_BBOX;
-    self->model = "players/male/tris.md2";
+    self->model = "players/male/tris.md2"; // only grunt available
     self->s.effects = 0;
     self->s.modelindex = gi.modelindex(self->model);
-    self->s.modelindex2 = gi.modelindex("players/male/w_chaingun.md2");
+    self->s.modelindex2 = gi.modelindex("players/male/w_chaingun.md2"); // set default weapon
     self->s.modelindex3 = 0;
-    self->s.modelindex4 = 255;
-    self->s.skinnum = rand();
+    self->s.modelindex4 = 255; // this allow to take random skin
+    self->s.skinnum = rand(); // set one of them
     self->s.frame = 0;
     self->s.renderfx = 0;
     self->waterlevel = 0;
@@ -562,6 +567,8 @@ void SP_misc_actor(edict_t *self)
     self->monsterinfo.stand = actor_stand;
     self->monsterinfo.walk = actor_walk;
     self->monsterinfo.run = actor_run;
+    // actor may crouch?
+    // self->monsterinfo.dodge = actor_dodge;
     self->monsterinfo.attack = actor_attack;
     self->monsterinfo.melee = NULL;
     self->monsterinfo.sight = NULL;
@@ -605,6 +612,7 @@ void target_actor_touch(edict_t *self, edict_t *other, cplane_t *plane, csurface
     if (other->enemy)
         return;
 
+    // actor is waiting?
     if (!self->wait || (other->spawnflags & WAIT_ONCE))
         other->goalentity = other->movetarget = NULL;
 
@@ -621,6 +629,7 @@ void target_actor_touch(edict_t *self, edict_t *other, cplane_t *plane, csurface
         }
     }
 
+    // wait moment if is defined
     if (self->wait && !(other->spawnflags & WAIT_ONCE)) {
         other->monsterinfo.pausetime = level.time + self->wait;
         other->monsterinfo.stand (other);
@@ -628,7 +637,7 @@ void target_actor_touch(edict_t *self, edict_t *other, cplane_t *plane, csurface
         return;
     }
 
-    other->spawnflags &= ~WAIT_ONCE;
+    other->spawnflags &= ~WAIT_ONCE; // clear waiting flag
 
     if (self->spawnflags & 1) {     //jump
         other->velocity[0] = self->movedir[0] * self->speed;

@@ -91,7 +91,7 @@ void Killed(edict_t *targ, edict_t *inflictor, edict_t *attacker, int damage, ve
     if (targ->health < -999)
         targ->health = -999;
 
-    // remove shell effect
+    // remove unnecessary shell effect when medic dying
     if (skill->value == 4){
         if (!strcmp(targ->classname, "monster_medic")) {
             if (targ->enemy /*&& (targ->enemy->owner == targ)*/)
@@ -300,25 +300,25 @@ void M_ReactToDamage(edict_t *targ, edict_t *attacker)
 	
     // hell reactions
     if (skill->value == 4) {
-        if ((targ->monsterinfo.aiflags & AI_MEDIC) ||
+        if ((targ->monsterinfo.aiflags & AI_MEDIC) || // required revive at first
             (targ->monsterinfo.aiflags & AI_RESURRECTING) || (targ->health < 1))
             return;
 
+        // evil against good
         if (/*(targ->oldenemy != attacker) &&*/ (targ->enemy != attacker) &&
             ((IS_GOOD_GUY(targ) && !IS_GOOD_GUY(attacker)) ||
             (!IS_GOOD_GUY(targ) && IS_GOOD_GUY(attacker)))) {
             // FIXME: if attacker have enemy and this enemy have old enemy, so this is our enemy too!
             if (attacker->health < 1)
                 return; // do nothing in this case..
-            if (!targ->enemy) {
+            if (!targ->enemy) { // is busy?
                 targ->enemy = attacker;
                 if (!(targ->monsterinfo.aiflags & AI_DUCKED) &&
                     !(targ->monsterinfo.aiflags & AI_COMBAT_POINT))
                     FoundTarget(targ);
 
-                return;
-            }
-            else if (!visible (targ, targ->enemy) || !(targ->monsterinfo.aiflags & AI_HOLD_FRAME)) {
+                return; // is possible moment to switch between targets?
+            } else if (!visible(targ, targ->enemy) || !(targ->monsterinfo.aiflags & AI_HOLD_FRAME)) {
                 targ->oldenemy = targ->enemy;
                 targ->enemy = attacker;
                 if (!(targ->monsterinfo.aiflags & AI_DUCKED) &&
@@ -326,13 +326,14 @@ void M_ReactToDamage(edict_t *targ, edict_t *attacker)
                     FoundTarget(targ);
 
                 return;
-            } else {
+            } else { // is busy now! it'll take care later
                 targ->oldenemy = attacker;
             }
 
             return;
         }
 
+        // good against good
         if (IS_GOOD_GUY(targ) && IS_GOOD_GUY(attacker)) {
             if (attacker->enemy && (targ->oldenemy != attacker->enemy) &&
                 (targ->enemy != attacker->enemy) && !IS_GOOD_GUY(attacker->enemy)) {
@@ -357,7 +358,9 @@ void M_ReactToDamage(edict_t *targ, edict_t *attacker)
             return;
         }
 
+        // evil against evil
         if (!IS_GOOD_GUY(targ) && !IS_GOOD_GUY(attacker)) {
+            // get his enemy
             if (attacker->enemy && (targ->oldenemy != attacker->enemy) &&            
                 (targ->enemy != attacker->enemy) && IS_GOOD_GUY(attacker->enemy)){
                 targ->oldenemy = targ->enemy;
@@ -365,7 +368,7 @@ void M_ReactToDamage(edict_t *targ, edict_t *attacker)
                 if (!(targ->monsterinfo.aiflags & AI_DUCKED) &&
                     !(targ->monsterinfo.aiflags & AI_COMBAT_POINT))
                     FoundTarget(targ);
-            }
+            } // get his old enemy
             if (attacker->oldenemy && (targ->oldenemy != attacker->oldenemy) &&
                 (targ->enemy != attacker->oldenemy) && IS_GOOD_GUY(attacker->oldenemy)) {
                 if (!targ->enemy) {

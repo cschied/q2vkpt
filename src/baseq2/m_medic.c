@@ -54,7 +54,7 @@ edict_t *medic_FindDeadMonster(edict_t *self)
         if (IS_GOOD_GUY(ent))
             continue;
         // in hell doesn't matter it's mine or not
-        if (ent->owner /*&& (skill->value < 4)*/)
+        if (ent->owner && (skill->value < 4))
             continue;
         if (ent->health > 0)
             continue;

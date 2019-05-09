@@ -845,8 +845,9 @@ qboolean ai_checkattack(edict_t *self, float dist)
     }
 	
     // pressed button is equal to killed
-    if (!hesDeadJim && self->enemy && !strcmp (self->enemy->classname, "func_button") && (self->enemy->nextthink > 0)){
-        hesDeadJim = qtrue;
+    if (!hesDeadJim && self->enemy && (self->enemy->nextthink > 0)
+        && !strcmp(self->enemy->classname, "func_button")) {
+        hesDeadJim = qtrue; // useful when actor to set against it
     }
 
     if (hesDeadJim) {

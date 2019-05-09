@@ -558,7 +558,7 @@ qboolean gunner_can_attack_grenade(vec3_t t1, vec3_t t2)
     VectorSubtract(t2, t1, vec);
     len = VectorLength (vec);
 
-    if ((len < (575.f + (abs(t1[2] - t2[2]) * 2))) && (len > 75.f))
+    if ((len < (575.f + ((t1[2] - t2[2]) * 4.5f))) && (len > 75.f)) // if target is above gunner then grenade range is lower
         return qtrue;
     else
         return qfalse;

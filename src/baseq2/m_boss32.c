@@ -203,6 +203,16 @@ void makron_walk(edict_t *self)
 
 void makron_run(edict_t *self)
 {
+// makron no need this
+	/*if (skill->value == 4) {
+        if (!self->targetname && !self->monsterinfo.aiflags){
+            self->monsterinfo.currentmove = &makron_move_stand;
+            if (!(self->monsterinfo.aiflags & AI_STAND_GROUND))
+                self->monsterinfo.aiflags |= AI_STAND_GROUND;
+            return;
+        }
+    }*/
+
     if (self->monsterinfo.aiflags & AI_STAND_GROUND)
         self->monsterinfo.currentmove = &makron_move_stand;
     else
@@ -402,6 +412,7 @@ void makronBFG(edict_t *self)
     vec3_t  start;
     vec3_t  dir;
     vec3_t  vec;
+    int     dmg;
 
     AngleVectors(self->s.angles, forward, right, NULL);
     G_ProjectSource(self->s.origin, monster_flash_offset[MZ2_MAKRON_BFG], forward, right, start);
@@ -411,7 +422,12 @@ void makronBFG(edict_t *self)
     VectorSubtract(vec, start, dir);
     VectorNormalize(dir);
     gi.sound(self, CHAN_VOICE, sound_attack_bfg, 1, ATTN_NORM, 0);
-    monster_fire_bfg(self, start, dir, 50, 300, 100, 300, MZ2_MAKRON_BFG);
+
+    dmg = 50;
+    if (skill->value > 3)
+        dmg *= 1.25; // 25% more damage for monsters
+
+    monster_fire_bfg(self, start, dir, dmg, 300, 100, 300, MZ2_MAKRON_BFG);
 }
 
 
@@ -489,6 +505,7 @@ void MakronRailgun(edict_t *self)
     vec3_t  start;
     vec3_t  dir;
     vec3_t  forward, right;
+    int     dmg;
 
     AngleVectors(self->s.angles, forward, right, NULL);
     G_ProjectSource(self->s.origin, monster_flash_offset[MZ2_MAKRON_RAILGUN_1], forward, right, start);
@@ -497,7 +514,11 @@ void MakronRailgun(edict_t *self)
     VectorSubtract(self->pos1, start, dir);
     VectorNormalize(dir);
 
-    monster_fire_railgun(self, start, dir, 50, 100, MZ2_MAKRON_RAILGUN_1);
+    dmg = 50;
+    if (skill->value > 3)
+        dmg *= 1.25; // 25% more damage for monsters
+
+    monster_fire_railgun(self, start, dir, dmg, 100, MZ2_MAKRON_RAILGUN_1);
 }
 
 // FIXME: This is all wrong. He's not firing at the proper angles.
@@ -507,7 +528,7 @@ void MakronHyperblaster(edict_t *self)
     vec3_t  vec;
     vec3_t  start;
     vec3_t  forward, right;
-    int     flash_number;
+    int     flash_number, dmg;
 
     flash_number = MZ2_MAKRON_BLASTER_1 + (self->s.frame - FRAME_attak405);
 
@@ -531,13 +552,16 @@ void MakronHyperblaster(edict_t *self)
 
     AngleVectors(dir, forward, NULL, NULL);
 
-    monster_fire_blaster(self, start, forward, 15, 1000, MZ2_MAKRON_BLASTER_1, EF_BLASTER);
+    dmg = 15;
+    if (skill->value > 3)
+        dmg *= 1.25; // 25% more damage for monsters
+
+    monster_fire_blaster(self, start, forward, dmg, 1000, MZ2_MAKRON_BLASTER_1, EF_BLASTER);
 }
 
 
 void makron_pain(edict_t *self, edict_t *other, float kick, int damage)
 {
-
     if (self->health < (self->max_health / 2))
         self->s.skinnum = 1;
 
@@ -550,8 +574,8 @@ void makron_pain(edict_t *self, edict_t *other, float kick, int damage)
             return;
 
     self->pain_debounce_time = level.time + 3;
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
 
     if (damage <= 40) {
@@ -582,13 +606,17 @@ void makron_sight(edict_t *self, edict_t *other)
 
 void makron_attack(edict_t *self)
 {
-    float   r;
+    vec3_t  vec;
+	float   r, range;
+
+    VectorSubtract(self->enemy->s.origin, self->s.origin, vec);
+    range = VectorLength(vec);
 
     r = random();
 
-    if (r <= 0.3)
+    if ((r <= 0.3) || ((skill->value > 3) && (range > 100)))
         self->monsterinfo.currentmove = &makron_move_attack3;
-    else if (r <= 0.6)
+    else if ((skill->value < 4) && (r <= 0.6))
         self->monsterinfo.currentmove = &makron_move_attack4;
     else
         self->monsterinfo.currentmove = &makron_move_attack5;
@@ -645,6 +673,9 @@ void makron_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damage
     edict_t *tempent;
 
     int     n;
+
+    if (skill->value > 3)
+        VectorCopy(self->s.origin, self->monsterinfo.last_sighting);
 
     self->s.sound = 0;
     // check for gib
@@ -738,14 +769,14 @@ qboolean Makron_CheckAttack(edict_t *self)
         return qfalse;
     }
 
-    if (random() < chance) {
+    if ((skill->value > 3) || (random() < chance)) {
         self->monsterinfo.attack_state = AS_MISSILE;
         self->monsterinfo.attack_finished = level.time + 2 * random();
         return qtrue;
     }
 
     if (self->flags & FL_FLY) {
-        if (random() < 0.3)
+        if ((skill->value < 4) && (random() < 0.3))
             self->monsterinfo.attack_state = AS_SLIDING;
         else
             self->monsterinfo.attack_state = AS_STRAIGHT;
@@ -799,6 +830,11 @@ void SP_monster_makron(edict_t *self)
     self->health = 3000;
     self->gib_health = -2000;
     self->mass = 500;
+
+    if (skill->value > 3) {
+        self->health *= 1.25; // 25% more health for monsters
+        self->gib_health *= 1.25;
+    }
 
     self->pain = makron_pain;
     self->die = makron_die;

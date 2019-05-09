@@ -91,11 +91,21 @@ void Killed(edict_t *targ, edict_t *inflictor, edict_t *attacker, int damage, ve
     if (targ->health < -999)
         targ->health = -999;
 
+    // remove shell effect
+    if (skill->value == 4){
+        if (!strcmp(targ->classname, "monster_medic")) {
+            if (targ->enemy /*&& (targ->enemy->owner == targ)*/)
+                targ->enemy->monsterinfo.aiflags &= ~AI_RESURRECTING;
+            if (targ->oldenemy /*&& (targ->oldenemy->owner == targ)*/)
+                targ->oldenemy->monsterinfo.aiflags &= ~AI_RESURRECTING;
+        }
+    }
+
     targ->enemy = attacker;
 
     if ((targ->svflags & SVF_MONSTER) && (targ->deadflag != DEAD_DEAD)) {
 //      targ->svflags |= SVF_DEADMONSTER;   // now treat as a different content type
-        if (!(targ->monsterinfo.aiflags & AI_GOOD_GUY)) {
+        if (!IS_GOOD_GUY(targ)) {
             level.killed_monsters++;
             if (coop->value && attacker->client)
                 attacker->client->resp.score++;
@@ -285,13 +295,100 @@ void M_ReactToDamage(edict_t *targ, edict_t *attacker)
     if (!(attacker->client) && !(attacker->svflags & SVF_MONSTER))
         return;
 
-    if (attacker == targ || attacker == targ->enemy)
+    if (attacker == targ || ((attacker == targ->enemy) && (skill->value < 4)))
         return;
+	
+    // hell reactions
+    if (skill->value == 4) {
+        if ((targ->monsterinfo.aiflags & AI_MEDIC) ||
+            (targ->monsterinfo.aiflags & AI_RESURRECTING) || (targ->health < 1))
+            return;
+
+        if (/*(targ->oldenemy != attacker) &&*/ (targ->enemy != attacker) &&
+            ((IS_GOOD_GUY(targ) && !IS_GOOD_GUY(attacker)) ||
+            (!IS_GOOD_GUY(targ) && IS_GOOD_GUY(attacker)))) {
+            // FIXME: if attacker have enemy and this enemy have old enemy, so this is our enemy too!
+            if (attacker->health < 1)
+                return; // do nothing in this case..
+            if (!targ->enemy) {
+                targ->enemy = attacker;
+                if (!(targ->monsterinfo.aiflags & AI_DUCKED) &&
+                    !(targ->monsterinfo.aiflags & AI_COMBAT_POINT))
+                    FoundTarget(targ);
+
+                return;
+            }
+            else if (!visible (targ, targ->enemy) || !(targ->monsterinfo.aiflags & AI_HOLD_FRAME)) {
+                targ->oldenemy = targ->enemy;
+                targ->enemy = attacker;
+                if (!(targ->monsterinfo.aiflags & AI_DUCKED) &&
+                    !(targ->monsterinfo.aiflags & AI_COMBAT_POINT))
+                    FoundTarget(targ);
+
+                return;
+            } else {
+                targ->oldenemy = attacker;
+            }
+
+            return;
+        }
+
+        if (IS_GOOD_GUY(targ) && IS_GOOD_GUY(attacker)) {
+            if (attacker->enemy && (targ->oldenemy != attacker->enemy) &&
+                (targ->enemy != attacker->enemy) && !IS_GOOD_GUY(attacker->enemy)) {
+                targ->oldenemy = targ->enemy;
+                targ->enemy = attacker->enemy;                
+                if (!(targ->monsterinfo.aiflags & AI_DUCKED) &&
+                    !(targ->monsterinfo.aiflags & AI_COMBAT_POINT))
+                    FoundTarget (targ);
+            }
+            if (attacker->oldenemy && (targ->oldenemy != attacker->oldenemy) &&
+                (targ->enemy != attacker->oldenemy) && !IS_GOOD_GUY(attacker->oldenemy)) {
+                if (!targ->enemy) {
+                    targ->enemy = attacker->oldenemy;
+                    if (!(targ->monsterinfo.aiflags & AI_DUCKED) &&
+                        !(targ->monsterinfo.aiflags & AI_COMBAT_POINT))
+                        FoundTarget(targ);
+                    return;
+                }
+                else targ->oldenemy = attacker->oldenemy;
+            }
+
+            return;
+        }
+
+        if (!IS_GOOD_GUY(targ) && !IS_GOOD_GUY(attacker)) {
+            if (attacker->enemy && (targ->oldenemy != attacker->enemy) &&            
+                (targ->enemy != attacker->enemy) && IS_GOOD_GUY(attacker->enemy)){
+                targ->oldenemy = targ->enemy;
+                targ->enemy = attacker->enemy;                
+                if (!(targ->monsterinfo.aiflags & AI_DUCKED) &&
+                    !(targ->monsterinfo.aiflags & AI_COMBAT_POINT))
+                    FoundTarget(targ);
+            }
+            if (attacker->oldenemy && (targ->oldenemy != attacker->oldenemy) &&
+                (targ->enemy != attacker->oldenemy) && IS_GOOD_GUY(attacker->oldenemy)) {
+                if (!targ->enemy) {
+                    targ->enemy = attacker->oldenemy;
+                    if (!(targ->monsterinfo.aiflags & AI_DUCKED) &&
+                        !(targ->monsterinfo.aiflags & AI_COMBAT_POINT))
+                        FoundTarget(targ);
+                    return;
+                }
+                else targ->oldenemy = attacker->oldenemy;
+            }
+
+            return;
+        }
+
+        // do nothing!
+        return;
+    }
 
     // if we are a good guy monster and our attacker is a player
     // or another good guy, do not get mad at them
-    if (targ->monsterinfo.aiflags & AI_GOOD_GUY) {
-        if (attacker->client || (attacker->monsterinfo.aiflags & AI_GOOD_GUY))
+    if (IS_GOOD_GUY(targ)) {
+        if (attacker->client || IS_GOOD_GUY(attacker))
             return;
     }
 
@@ -481,8 +578,8 @@ void T_Damage(edict_t *targ, edict_t *inflictor, edict_t *attacker, vec3_t dir, 
         M_ReactToDamage(targ, attacker);
         if (!(targ->monsterinfo.aiflags & AI_DUCKED) && (take)) {
             targ->pain(targ, attacker, knockback, take);
-            // nightmare mode monsters don't go into pain frames often
-            if (skill->value == 3)
+            // nightmare & hell mode monsters don't go into pain frames often
+            if (skill->value > 2)
                 targ->pain_debounce_time = level.time + 5;
         }
     } else if (client) {

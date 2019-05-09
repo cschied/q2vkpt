@@ -205,6 +205,15 @@ mmove_t gunner_move_run = {FRAME_run01, FRAME_run08, gunner_frames_run, NULL};
 
 void gunner_run(edict_t *self)
 {
+    if (skill->value == 4) {
+        if (!self->targetname && !self->monsterinfo.aiflags){
+            self->monsterinfo.currentmove = &gunner_move_stand;
+            if (!(self->monsterinfo.aiflags & AI_STAND_GROUND))
+                self->monsterinfo.aiflags |= AI_STAND_GROUND;
+            return;
+        }
+    }
+
     if (self->monsterinfo.aiflags & AI_STAND_GROUND)
         self->monsterinfo.currentmove = &gunner_move_stand;
     else
@@ -285,8 +294,8 @@ void gunner_pain(edict_t *self, edict_t *other, float kick, int damage)
     else
         gi.sound(self, CHAN_VOICE, sound_pain2, 1, ATTN_NORM, 0);
 
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     if (damage <= 10)
         self->monsterinfo.currentmove = &gunner_move_pain3;
@@ -340,6 +349,9 @@ void gunner_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damage
     if (self->deadflag == DEAD_DEAD)
         return;
 
+    if (skill->value > 3)
+        GunnerGrenade(self);
+
 // regular death
     gi.sound(self, CHAN_VOICE, sound_death, 1, ATTN_NORM, 0);
     self->deadflag = DEAD_DEAD;
@@ -353,8 +365,8 @@ void gunner_duck_down(edict_t *self)
     if (self->monsterinfo.aiflags & AI_DUCKED)
         return;
     self->monsterinfo.aiflags |= AI_DUCKED;
-    if (skill->value >= 2) {
-        if (random() > 0.5)
+    if (skill->value > 1) {
+        if ((skill->value > 3) || (random() > 0.5))
             GunnerGrenade(self);
     }
 
@@ -415,7 +427,7 @@ void GunnerFire(edict_t *self)
     vec3_t  forward, right;
     vec3_t  target;
     vec3_t  aim;
-    int     flash_number;
+    int     flash_number, dmg;
 
     flash_number = MZ2_GUNNER_MACHINEGUN_1 + (self->s.frame - FRAME_attak216);
 
@@ -429,7 +441,12 @@ void GunnerFire(edict_t *self)
 
     VectorSubtract(target, start, aim);
     VectorNormalize(aim);
-    monster_fire_bullet(self, start, aim, 3, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, flash_number);
+
+    dmg = 3;
+    if (skill->value > 3)
+        dmg *= 1.5; // 50% more damage
+
+    monster_fire_bullet(self, start, aim, dmg, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, flash_number);
 }
 
 void GunnerGrenade(edict_t *self)
@@ -437,7 +454,7 @@ void GunnerGrenade(edict_t *self)
     vec3_t  start;
     vec3_t  forward, right;
     vec3_t  aim;
-    int     flash_number;
+    int     flash_number, dmg;
 
     if (self->s.frame == FRAME_attak105)
         flash_number = MZ2_GUNNER_GRENADE_1;
@@ -454,7 +471,11 @@ void GunnerGrenade(edict_t *self)
     //FIXME : do a spread -225 -75 75 225 degrees around forward
     VectorCopy(forward, aim);
 
-    monster_fire_grenade(self, start, aim, 50, 600, flash_number);
+    dmg = 50;
+    if (skill->value > 3)
+        dmg *= 1.25; // 25% more damage for monsters
+
+    monster_fire_grenade(self, start, aim, dmg, 600, flash_number);
 }
 
 mframe_t gunner_frames_attack_chain [] = {
@@ -526,8 +547,32 @@ mframe_t gunner_frames_attack_grenade [] = {
 };
 mmove_t gunner_move_attack_grenade = {FRAME_attak101, FRAME_attak121, gunner_frames_attack_grenade, gunner_run};
 
+qboolean gunner_can_attack_grenade(vec3_t t1, vec3_t t2)
+{
+    vec3_t  vec;
+    float   len;
+
+    VectorSubtract(t2, t1, vec);
+    len = VectorLength (vec);
+
+    if ((len < (575.f + (abs(t1[2] - t2[2]) * 2))) && (len > 75.f))
+        return qtrue;
+    else
+        return qfalse;
+}
+
 void gunner_attack(edict_t *self)
 {
+    if (skill->value == 4){
+        if ((self->enemy->s.origin[2] < (self->s.origin[2] + 20)) &&
+            gunner_can_attack_grenade(self->s.origin, self->enemy->s.origin))
+            self->monsterinfo.currentmove = &gunner_move_attack_grenade;
+        else
+            self->monsterinfo.currentmove = &gunner_move_attack_chain;
+
+        return;
+    }
+
     if (range(self, self->enemy) == RANGE_MELEE) {
         self->monsterinfo.currentmove = &gunner_move_attack_chain;
     } else {
@@ -547,7 +592,7 @@ void gunner_refire_chain(edict_t *self)
 {
     if (self->enemy->health > 0)
         if (visible(self, self->enemy))
-            if (random() <= 0.5) {
+            if ((skill->value > 3) || (random() <= 0.5)) {
                 self->monsterinfo.currentmove = &gunner_move_fire_chain;
                 return;
             }
@@ -583,6 +628,11 @@ void SP_monster_gunner(edict_t *self)
     self->health = 175;
     self->gib_health = -70;
     self->mass = 200;
+
+    if (skill->value > 3) {
+        self->health *= 1.25; // 25% more health for monsters
+        self->gib_health *= 1.25;
+    }
 
     self->pain = gunner_pain;
     self->die = gunner_die;

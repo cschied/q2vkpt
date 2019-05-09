@@ -173,7 +173,7 @@ void flipper_bite(edict_t *self)
     vec3_t  aim;
 
     VectorSet(aim, MELEE_DISTANCE, 0, 0);
-    fire_hit(self, aim, 5, 0);
+    fire_hit(self, aim, ((skill->value > 3)? 10 : 5), 0);
 }
 
 void flipper_preattack(edict_t *self)
@@ -222,8 +222,8 @@ void flipper_pain(edict_t *self, edict_t *other, float kick, int damage)
 
     self->pain_debounce_time = level.time + 3;
 
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     n = (rand() + 1) % 2;
     if (n == 0) {
@@ -319,6 +319,9 @@ void flipper_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damag
 {
     int     n;
 
+    if (skill->value > 3)
+        VectorCopy(self->s.origin, self->monsterinfo.last_sighting);
+
 // check for gib
     if (self->health <= self->gib_health) {
         gi.sound(self, CHAN_VOICE, gi.soundindex("misc/udeath.wav"), 1, ATTN_NORM, 0);
@@ -368,6 +371,11 @@ void SP_monster_flipper(edict_t *self)
     self->health = 50;
     self->gib_health = -30;
     self->mass = 100;
+
+    if (skill->value > 3) {
+        self->health *= 1.25; // 25% more health for monsters
+        self->gib_health *= 1.25;
+    }
 
     self->pain = flipper_pain;
     self->die = flipper_die;

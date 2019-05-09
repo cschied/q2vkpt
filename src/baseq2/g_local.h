@@ -83,6 +83,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #define BODY_QUEUE_SIZE     8
 
+// ???
+#define IS_GOOD_GUY(ent)    (ent->monsterinfo.aiflags & AI_GOOD_GUY)
+#define IS_ACTOR(ent)       (!strcmp(ent->classname, "misc_actor")) 
+#define IS_PLAYER_ALLY(ent) (IS_GOOD_GUY(ent) || IS_ACTOR(ent) || ent->client)
+
 typedef enum {
     DAMAGE_NO,
     DAMAGE_YES,         // will take damage if hit
@@ -93,7 +98,8 @@ typedef enum {
     WEAPON_READY,
     WEAPON_ACTIVATING,
     WEAPON_DROPPING,
-    WEAPON_FIRING
+    WEAPON_FIRING,
+    WEAPON_DEACTIVATED  // required to drop blaster
 } weaponstate_t;
 
 typedef enum {
@@ -138,6 +144,7 @@ typedef enum {
 #define AI_COMBAT_POINT         0x00001000
 #define AI_MEDIC                0x00002000
 #define AI_RESURRECTING         0x00004000
+#define AI_SHOOT_ONCE           0x00008000
 
 //monster attack state
 #define AS_STRAIGHT             1

@@ -169,6 +169,16 @@ mmove_t infantry_move_run = {FRAME_run01, FRAME_run08, infantry_frames_run, NULL
 
 void infantry_run(edict_t *self)
 {
+    if (skill->value == 4) {
+        if (!self->targetname && !self->monsterinfo.aiflags) {
+// prefer stand not run
+            self->monsterinfo.currentmove = &infantry_move_stand;
+            if (!(self->monsterinfo.aiflags & AI_STAND_GROUND))
+                self->monsterinfo.aiflags |= AI_STAND_GROUND;
+            return;
+        }
+    }
+
     if (self->monsterinfo.aiflags & AI_STAND_GROUND)
         self->monsterinfo.currentmove = &infantry_move_stand;
     else
@@ -216,8 +226,8 @@ void infantry_pain(edict_t *self, edict_t *other, float kick, int damage)
 
     self->pain_debounce_time = level.time + 3;
 
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     n = rand() % 2;
     if (n == 0) {
@@ -250,7 +260,7 @@ void InfantryMachineGun(edict_t *self)
     vec3_t  start, target;
     vec3_t  forward, right;
     vec3_t  vec;
-    int     flash_number;
+    int     flash_number, dmg;
 
     if (self->s.frame == FRAME_attak111) {
         flash_number = MZ2_INFANTRY_MACHINEGUN_1;
@@ -275,7 +285,11 @@ void InfantryMachineGun(edict_t *self)
         AngleVectors(vec, forward, NULL, NULL);
     }
 
-    monster_fire_bullet(self, start, forward, 3, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, flash_number);
+    dmg = 3;
+    if (skill->value > 3)
+        dmg *= 1.5; // 50% more damage
+
+    monster_fire_bullet(self, start, forward, dmg, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, flash_number);
 }
 
 void infantry_sight(edict_t *self, edict_t *other)
@@ -366,6 +380,10 @@ void infantry_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int dama
 {
     int     n;
 
+// store last infantry position
+    if (skill->value > 3)
+        VectorCopy(self->s.origin, self->monsterinfo.last_sighting);
+
 // check for gib
     if (self->health <= self->gib_health) {
         gi.sound(self, CHAN_VOICE, gi.soundindex("misc/udeath.wav"), 1, ATTN_NORM, 0);
@@ -437,7 +455,7 @@ mmove_t infantry_move_duck = {FRAME_duck01, FRAME_duck05, infantry_frames_duck, 
 
 void infantry_dodge(edict_t *self, edict_t *attacker, float eta)
 {
-    if (random() > 0.25)
+    if ((skill->value > 3) || (random() > 0.25))
         return;
 
     if (!self->enemy)
@@ -452,7 +470,7 @@ void infantry_cock_gun(edict_t *self)
     int     n;
 
     gi.sound(self, CHAN_WEAPON, sound_weapon_cock, 1, ATTN_NORM, 0);
-    n = (rand() & 15) + 3 + 7;
+    n = ((skill->value < 4)? (rand() & 15) : 18) + 3 + 7;
     self->monsterinfo.pausetime = level.time + n * FRAMETIME;
 }
 
@@ -514,7 +532,7 @@ mmove_t infantry_move_attack2 = {FRAME_attak201, FRAME_attak208, infantry_frames
 
 void infantry_attack(edict_t *self)
 {
-    if (range(self, self->enemy) == RANGE_MELEE)
+    if ((skill->value < 4) && (range(self, self->enemy) == RANGE_MELEE))
         self->monsterinfo.currentmove = &infantry_move_attack2;
     else
         self->monsterinfo.currentmove = &infantry_move_attack1;
@@ -554,6 +572,11 @@ void SP_monster_infantry(edict_t *self)
     self->health = 100;
     self->gib_health = -40;
     self->mass = 200;
+
+    if (skill->value > 3) {
+        self->health *= 1.25; // 25% more health for monsters
+        self->gib_health *= 1.25;
+    }
 
     self->pain = infantry_pain;
     self->die = infantry_die;

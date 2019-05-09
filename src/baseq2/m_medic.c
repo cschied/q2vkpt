@@ -51,13 +51,15 @@ edict_t *medic_FindDeadMonster(edict_t *self)
             continue;
         if (!(ent->svflags & SVF_MONSTER))
             continue;
-        if (ent->monsterinfo.aiflags & AI_GOOD_GUY)
+        if (IS_GOOD_GUY(ent))
             continue;
-        if (ent->owner)
+        // in hell doesn't matter it's mine or not
+        if (ent->owner /*&& (skill->value < 4)*/)
             continue;
         if (ent->health > 0)
             continue;
-        if (ent->nextthink)
+        // by this mutant is skipped!
+        if (ent->nextthink && (skill->value < 4))
             continue;
         if (!visible(self, ent))
             continue;
@@ -65,7 +67,13 @@ edict_t *medic_FindDeadMonster(edict_t *self)
             best = ent;
             continue;
         }
-        if (ent->max_health <= best->max_health)
+        // in hell doesn't matter it's stronger monster or not!
+        if ((ent->max_health <= best->max_health) && (skill->value < 4))
+            continue;
+        // in hell Z coordinate is more important for medic 
+        if ((skill->value == 4) &&
+            (abs(ent->s.origin[2] - self->s.origin[2]) >
+            abs(best->s.origin[2] - self->s.origin[2])))
             continue;
         best = ent;
     }
@@ -310,8 +318,8 @@ void medic_pain(edict_t *self, edict_t *other, float kick, int damage)
 
     self->pain_debounce_time = level.time + 3;
 
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     if (random() < 0.5) {
         self->monsterinfo.currentmove = &medic_move_pain1;
@@ -328,7 +336,7 @@ void medic_fire_blaster(edict_t *self)
     vec3_t  forward, right;
     vec3_t  end;
     vec3_t  dir;
-    int     effect;
+    int     effect, dmg;
 
     if ((self->s.frame == FRAME_attack9) || (self->s.frame == FRAME_attack12))
         effect = EF_BLASTER;
@@ -344,7 +352,11 @@ void medic_fire_blaster(edict_t *self)
     end[2] += self->enemy->viewheight;
     VectorSubtract(end, start, dir);
 
-    monster_fire_blaster(self, start, dir, 2, 1000, MZ2_MEDIC_BLASTER_1, effect);
+    dmg = 2;
+    if (skill->value == 4)
+        dmg *= 1.5; // 50% more damage
+
+    monster_fire_blaster(self, start, dir, dmg, 1000, MZ2_MEDIC_BLASTER_1, effect);
 }
 
 
@@ -395,6 +407,9 @@ mmove_t medic_move_death = {FRAME_death1, FRAME_death30, medic_frames_death, med
 void medic_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damage, vec3_t point)
 {
     int     n;
+
+    if (skill->value == 4)
+        VectorCopy(self->s.origin, self->monsterinfo.last_sighting);
 
     // if we had a pending patient, free him up for another medic
     if ((self->enemy) && (self->enemy->owner == self))
@@ -473,7 +488,7 @@ mmove_t medic_move_duck = {FRAME_duck1, FRAME_duck16, medic_frames_duck, medic_r
 
 void medic_dodge(edict_t *self, edict_t *attacker, float eta)
 {
-    if (random() > 0.25)
+    if ((skill->value == 4) || (random() > 0.25))
         return;
 
     if (!self->enemy)
@@ -506,7 +521,7 @@ mmove_t medic_move_attackHyperBlaster = {FRAME_attack15, FRAME_attack30, medic_f
 void medic_continue(edict_t *self)
 {
     if (visible(self, self->enemy))
-        if (random() <= 0.95)
+        if (random() <= ((skill->value < 4)? 0.95 : 0.35))
             self->monsterinfo.currentmove = &medic_move_attackHyperBlaster;
 }
 
@@ -592,13 +607,28 @@ void medic_cable_attack(edict_t *self)
         self->enemy->combattarget = NULL;
         self->enemy->deathtarget = NULL;
         self->enemy->owner = self;
+        if (skill->value == 4) {
+            self->enemy->enemy = NULL;
+            self->enemy->oldenemy = NULL;
+            if (self->enemy->gib_health > self->enemy->health)
+                VectorCopy(self->enemy->monsterinfo.last_sighting, self->enemy->s.origin);
+        }
         ED_CallSpawn(self->enemy);
+        if (skill->value == 4) {
+            // kill all in spawn area
+            gi.unlinkentity(self->enemy);
+            KillBox(self->enemy);
+            gi.linkentity(self->enemy);
+        }
         self->enemy->owner = NULL;
         if (self->enemy->think) {
             self->enemy->nextthink = level.time;
             self->enemy->think(self->enemy);
         }
-        self->enemy->monsterinfo.aiflags |= AI_RESURRECTING;
+        if (self->solid != SOLID_NOT)
+            self->enemy->monsterinfo.aiflags |= AI_RESURRECTING;
+        else
+            self->enemy->monsterinfo.aiflags &= ~AI_RESURRECTING;
         if (self->oldenemy && self->oldenemy->client) {
             self->enemy->enemy = self->oldenemy;
             FoundTarget(self->enemy);
@@ -712,6 +742,11 @@ void SP_monster_medic(edict_t *self)
     self->health = 300;
     self->gib_health = -130;
     self->mass = 400;
+
+    if (skill->value == 4) {
+        self->health *= 1.25; // in hell mode 25% hp more for monsters
+        self->gib_health *= 1.25;
+    }
 
     self->pain = medic_pain;
     self->die = medic_die;

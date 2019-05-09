@@ -355,7 +355,7 @@ void flyer_fire(edict_t *self, int flash_number)
     vec3_t  forward, right;
     vec3_t  end;
     vec3_t  dir;
-    int     effect;
+    int     effect, dmg;
 
     if ((self->s.frame == FRAME_attak204) || (self->s.frame == FRAME_attak207) || (self->s.frame == FRAME_attak210))
         effect = EF_HYPERBLASTER;
@@ -368,7 +368,9 @@ void flyer_fire(edict_t *self, int flash_number)
     end[2] += self->enemy->viewheight;
     VectorSubtract(end, start, dir);
 
-    monster_fire_blaster(self, start, dir, 1, 1000, flash_number, effect);
+    dmg = ((skill->value > 3)? 2 : 1);
+
+    monster_fire_blaster(self, start, dir, dmg, 1000, flash_number, effect);
 }
 
 void flyer_fireleft(edict_t *self)
@@ -495,13 +497,16 @@ void flyer_melee(edict_t *self)
 {
 //  flyer.nextmove = ACTION_attack1;
 //  self->monsterinfo.currentmove = &flyer_move_stop;
-    self->monsterinfo.currentmove = &flyer_move_start_melee;
+    if (skill->value > 3)
+        self->monsterinfo.currentmove = &flyer_move_attack2;
+    else
+        self->monsterinfo.currentmove = &flyer_move_start_melee;
 }
 
 void flyer_check_melee(edict_t *self)
 {
     if (range(self, self->enemy) == RANGE_MELEE)
-        if (random() <= 0.8)
+        if ((skill->value > 3) || (random() <= 0.8))
             self->monsterinfo.currentmove = &flyer_move_loop_melee;
         else
             self->monsterinfo.currentmove = &flyer_move_end_melee;
@@ -520,8 +525,8 @@ void flyer_pain(edict_t *self, edict_t *other, float kick, int damage)
         return;
 
     self->pain_debounce_time = level.time + 3;
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     n = rand() % 3;
     if (n == 0) {
@@ -577,7 +582,7 @@ void SP_monster_flyer(edict_t *self)
 
     self->s.sound = gi.soundindex("flyer/flyidle1.wav");
 
-    self->health = 50;
+    self->health = ((skill->value > 3)? 65 : 50);
     self->mass = 50;
 
     self->pain = flyer_pain;

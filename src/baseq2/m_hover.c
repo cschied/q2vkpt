@@ -404,7 +404,7 @@ void hover_reattack(edict_t *self)
 {
     if (self->enemy->health > 0)
         if (visible(self, self->enemy))
-            if (random() <= 0.6) {
+            if ((skill->value > 3) || (random() <= 0.6)) {
                 self->monsterinfo.currentmove = &hover_move_attack1;
                 return;
             }
@@ -418,7 +418,7 @@ void hover_fire_blaster(edict_t *self)
     vec3_t  forward, right;
     vec3_t  end;
     vec3_t  dir;
-    int     effect;
+    int     effect, dmg;
 
     if (self->s.frame == FRAME_attak104)
         effect = EF_HYPERBLASTER;
@@ -432,7 +432,9 @@ void hover_fire_blaster(edict_t *self)
     end[2] += self->enemy->viewheight;
     VectorSubtract(end, start, dir);
 
-    monster_fire_blaster(self, start, dir, 1, 1000, MZ2_HOVER_BLASTER_1, effect);
+	dmg = ((skill->value > 3)? 2 : 1);
+
+    monster_fire_blaster(self, start, dir, dmg, 1000, MZ2_HOVER_BLASTER_1, effect);
 }
 
 
@@ -475,8 +477,8 @@ void hover_pain(edict_t *self, edict_t *other, float kick, int damage)
 
     self->pain_debounce_time = level.time + 3;
 
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     if (damage <= 25) {
         if (random() < 0.5) {
@@ -515,6 +517,9 @@ void hover_dead(edict_t *self)
 void hover_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damage, vec3_t point)
 {
     int     n;
+
+    if (skill->value > 3)
+        VectorCopy(self->s.origin, self->monsterinfo.last_sighting);
 
 // check for gib
     if (self->health <= self->gib_health) {
@@ -571,6 +576,11 @@ void SP_monster_hover(edict_t *self)
     self->health = 240;
     self->gib_health = -100;
     self->mass = 150;
+
+    if (skill->value > 3) {
+        self->health *= 1.25; // 25% more health for monsters
+        self->gib_health *= 1.25;
+    }
 
     self->pain = hover_pain;
     self->die = hover_die;

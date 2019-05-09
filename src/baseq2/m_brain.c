@@ -343,7 +343,7 @@ mframe_t brain_frames_duck [] =
 mmove_t brain_move_duck = {FRAME_duck01, FRAME_duck08, brain_frames_duck, brain_run};
 
 void brain_dodge(edict_t *self, edict_t *attacker, float eta) {
-    if (random() > 0.25)
+    if ((skill->value > 3) || (random() > 0.25))
         return;
 
     if (!self->enemy)
@@ -400,7 +400,7 @@ void brain_hit_right(edict_t *self) {
     vec3_t  aim;
 
     VectorSet(aim, MELEE_DISTANCE, self->maxs[0], 8);
-    if (fire_hit(self, aim, (15 + (rand() % 5)), 40))
+    if (fire_hit(self, aim, (((skill->value > 3)? 30 : 15) + (rand() % 5)), 40))
         gi.sound(self, CHAN_WEAPON, sound_melee3, 1, ATTN_NORM, 0);
 }
 
@@ -412,7 +412,7 @@ void brain_hit_left(edict_t *self) {
     vec3_t  aim;
 
     VectorSet(aim, MELEE_DISTANCE, self->mins[0], 8);
-    if (fire_hit(self, aim, (15 + (rand() % 5)), 40))
+    if (fire_hit(self, aim, (((skill->value > 3)? 30 : 15) + (rand() % 5)), 40))
         gi.sound(self, CHAN_WEAPON, sound_melee3, 1, ATTN_NORM, 0);
 }
 
@@ -434,7 +434,7 @@ mframe_t brain_frames_attack1 [] =
     { ai_charge,  6,  NULL },
     { ai_charge,  -1, NULL },
     { ai_charge,  -3, NULL },
-    { ai_charge,  2,  NULL },
+    { ai_charge,  2,  brain_run },
     { ai_charge,  -11, NULL }
 };
 mmove_t brain_move_attack1 = {FRAME_attak101, FRAME_attak118, brain_frames_attack1, brain_run};
@@ -449,7 +449,7 @@ void brain_tentacle_attack(edict_t *self) {
     vec3_t  aim;
 
     VectorSet(aim, MELEE_DISTANCE, 0, 8);
-    if (fire_hit(self, aim, (10 + (rand() % 5)), -600) && skill->value > 0)
+    if (fire_hit(self, aim, (((skill->value > 3)? 20 : 10) + (rand() % 5)), -600) && skill->value > 0)
         self->spawnflags |= 65536;
     gi.sound(self, CHAN_WEAPON, sound_tentacles_retract, 1, ATTN_NORM, 0);
 }
@@ -458,7 +458,8 @@ void brain_chest_closed(edict_t *self) {
     self->monsterinfo.power_armor_type = POWER_ARMOR_SCREEN;
     if (self->spawnflags & 65536) {
         self->spawnflags &= ~65536;
-        self->monsterinfo.currentmove = &brain_move_attack1;
+        // if (skill->value < 4)
+             self->monsterinfo.currentmove = &brain_move_attack1;
     }
 }
 
@@ -485,7 +486,7 @@ mframe_t brain_frames_attack2 [] =
 mmove_t brain_move_attack2 = {FRAME_attak201, FRAME_attak217, brain_frames_attack2, brain_run};
 
 void brain_melee(edict_t *self) {
-    if (random() <= 0.5)
+	if (((skill->value < 4) /*&& (self->s.frame = FRAME_attak106)*/) && (random () <= 0.5))
         self->monsterinfo.currentmove = &brain_move_attack1;
     else
         self->monsterinfo.currentmove = &brain_move_attack2;
@@ -513,6 +514,18 @@ mframe_t brain_frames_run [] =
 mmove_t brain_move_run = {FRAME_walk101, FRAME_walk111, brain_frames_run, NULL};
 
 void brain_run(edict_t *self) {
+    if (self->s.frame == FRAME_attak117)
+        if (skill->value > 3) {
+            if (range(self, self->enemy) == RANGE_MELEE)
+                self->s.frame = FRAME_attak102;
+            else {
+                self->s.frame = FRAME_attak205;
+                self->monsterinfo.currentmove = &brain_move_attack2;
+            }
+            return;
+        } else
+            return;
+
     self->monsterinfo.power_armor_type = POWER_ARMOR_SCREEN;
     if (self->monsterinfo.aiflags & AI_STAND_GROUND)
         self->monsterinfo.currentmove = &brain_move_stand;
@@ -531,8 +544,8 @@ void brain_pain(edict_t *self, edict_t *other, float kick, int damage) {
         return;
 
     self->pain_debounce_time = level.time + 3;
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     r = random();
     if (r < 0.33) {
@@ -563,6 +576,9 @@ void brain_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damage,
 
     self->s.effects = 0;
     self->monsterinfo.power_armor_type = POWER_ARMOR_NONE;
+
+    if (skill->value > 3)
+        VectorCopy(self->s.origin, self->monsterinfo.last_sighting);
 
 // check for gib
     if (self->health <= self->gib_health) {
@@ -637,6 +653,12 @@ void SP_monster_brain(edict_t *self) {
 
     self->monsterinfo.power_armor_type = POWER_ARMOR_SCREEN;
     self->monsterinfo.power_armor_power = 100;
+
+    if (skill->value > 3) {
+        self->health *= 1.25; // 25% more health
+        self->gib_health *= 1.25;
+        self->monsterinfo.power_armor_power *= 1.25; // 25% more armor
+    }
 
     gi.linkentity(self);
 

@@ -288,8 +288,10 @@ void HelpComputer(edict_t *ent)
         sk = "medium";
     else if (skill->value == 2)
         sk = "hard";
-    else
+    else if (skill->value == 3)
         sk = "hard+";
+    else
+        sk = "hell";
 
     // send the layout
     Q_snprintf(string, sizeof(string),

@@ -160,6 +160,15 @@ mmove_t tank_move_stop_walk = {FRAME_walk21, FRAME_walk25, tank_frames_stop_walk
 
 void tank_walk(edict_t *self)
 {
+    if (skill->value == 4) {
+        if (!self->targetname && !self->monsterinfo.aiflags){
+            self->monsterinfo.currentmove = &tank_move_stand;
+            if (!(self->monsterinfo.aiflags & AI_STAND_GROUND))
+                self->monsterinfo.aiflags |= AI_STAND_GROUND;
+            return;
+        }
+    }
+
     self->monsterinfo.currentmove = &tank_move_walk;
 }
 
@@ -284,8 +293,8 @@ void tank_pain(edict_t *self, edict_t *other, float kick, int damage)
         if (random() > 0.2)
             return;
 
-    // If hard or nightmare, don't go into pain while attacking
-    if (skill->value >= 2) {
+    // If hard, nightmare or hell, don't go into pain while attacking
+    if (skill->value > 1) {
         if ((self->s.frame >= FRAME_attak301) && (self->s.frame <= FRAME_attak330))
             return;
         if ((self->s.frame >= FRAME_attak101) && (self->s.frame <= FRAME_attak116))
@@ -295,8 +304,8 @@ void tank_pain(edict_t *self, edict_t *other, float kick, int damage)
     self->pain_debounce_time = level.time + 3;
     gi.sound(self, CHAN_VOICE, sound_pain, 1, ATTN_NORM, 0);
 
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     if (damage <= 30)
         self->monsterinfo.currentmove = &tank_move_pain1;
@@ -317,7 +326,7 @@ void TankBlaster(edict_t *self)
     vec3_t  start;
     vec3_t  end;
     vec3_t  dir;
-    int     flash_number;
+    int     flash_number, dmg;
 
     if (self->s.frame == FRAME_attak110)
         flash_number = MZ2_TANK_BLASTER_1;
@@ -333,7 +342,11 @@ void TankBlaster(edict_t *self)
     end[2] += self->enemy->viewheight;
     VectorSubtract(end, start, dir);
 
-    monster_fire_blaster(self, start, dir, 30, 800, flash_number, EF_BLASTER);
+    dmg = 30;
+    if (skill->value == 4)
+        dmg *= 1.25; // in hell mode 25% more damage
+
+    monster_fire_blaster(self, start, dir, dmg, 800, flash_number, EF_BLASTER);
 }
 
 void TankStrike(edict_t *self)
@@ -347,7 +360,7 @@ void TankRocket(edict_t *self)
     vec3_t  start;
     vec3_t  dir;
     vec3_t  vec;
-    int     flash_number;
+    int     flash_number, dmg;
 
     if (self->s.frame == FRAME_attak324)
         flash_number = MZ2_TANK_ROCKET_1;
@@ -364,7 +377,11 @@ void TankRocket(edict_t *self)
     VectorSubtract(vec, start, dir);
     VectorNormalize(dir);
 
-    monster_fire_rocket(self, start, dir, 50, 550, flash_number);
+    dmg = 50;
+    if (skill->value == 4)
+        dmg *= 1.25; // in hell mode 25% more damage
+
+    monster_fire_rocket(self, start, dir, dmg, 550, flash_number);
 }
 
 void TankMachineGun(edict_t *self)
@@ -373,7 +390,7 @@ void TankMachineGun(edict_t *self)
     vec3_t  vec;
     vec3_t  start;
     vec3_t  forward, right;
-    int     flash_number;
+    int     flash_number, dmg;
 
     flash_number = MZ2_TANK_MACHINEGUN_1 + (self->s.frame - FRAME_attak406);
 
@@ -397,7 +414,11 @@ void TankMachineGun(edict_t *self)
 
     AngleVectors(dir, forward, NULL, NULL);
 
-    monster_fire_bullet(self, start, forward, 20, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, flash_number);
+    dmg = 20;
+    if (skill->value == 4)
+        dmg *= 1.25; // in hell mode 25% more damage
+
+    monster_fire_bullet(self, start, forward, dmg, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, flash_number);
 }
 
 
@@ -443,10 +464,10 @@ mmove_t tank_move_attack_post_blast = {FRAME_attak117, FRAME_attak122, tank_fram
 
 void tank_reattack_blaster(edict_t *self)
 {
-    if (skill->value >= 2)
+    if (skill->value > 1)
         if (visible(self, self->enemy))
             if (self->enemy->health > 0)
-                if (random() <= 0.6) {
+                if ((skill->value == 4) || (random() <= 0.6)) {
                     self->monsterinfo.currentmove = &tank_move_reattack_blast;
                     return;
                 }
@@ -606,11 +627,11 @@ mmove_t tank_move_attack_chain = {FRAME_attak401, FRAME_attak429, tank_frames_at
 
 void tank_refire_rocket(edict_t *self)
 {
-    // Only on hard or nightmare
-    if (skill->value >= 2)
+    // Only on hard, nightmare or hell
+    if (skill->value > 1)
         if (self->enemy->health > 0)
             if (visible(self, self->enemy))
-                if (random() <= 0.4) {
+                if ((skill->value == 4) || (random() <= 0.4)) {
                     self->monsterinfo.currentmove = &tank_move_attack_fire_rocket;
                     return;
                 }
@@ -631,6 +652,20 @@ void tank_attack(edict_t *self)
     if (self->enemy->health < 0) {
         self->monsterinfo.currentmove = &tank_move_attack_strike;
         self->monsterinfo.aiflags &= ~AI_BRUTAL;
+        return;
+    }
+
+    if (skill->value == 4) {
+        VectorSubtract(self->enemy->s.origin, self->s.origin, vec);
+        range = VectorLength(vec);
+        
+        if (range < 250)
+            self->monsterinfo.currentmove = &tank_move_attack_blast;
+        else {
+            self->monsterinfo.currentmove = &tank_move_attack_pre_rocket;
+            self->pain_debounce_time = level.time + 5.0;    // no pain for a while
+        }
+		
         return;
     }
 
@@ -715,6 +750,9 @@ void tank_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damage, 
 {
     int     n;
 
+    if (skill->value == 4)
+        VectorCopy(self->s.origin, self->monsterinfo.last_sighting);
+
 // check for gib
     if (self->health <= self->gib_health) {
         gi.sound(self, CHAN_VOICE, gi.soundindex("misc/udeath.wav"), 1, ATTN_NORM, 0);
@@ -785,6 +823,10 @@ void SP_monster_tank(edict_t *self)
     } else {
         self->health = 750;
         self->gib_health = -200;
+    }
+    if (skill->value == 4) {
+        self->health *= 1.25; // in hell mode 25% hp more for monsters
+        self->gib_health *= 1.25;
     }
 
     self->mass = 500;

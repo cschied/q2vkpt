@@ -109,7 +109,7 @@ void PlayerNoise(edict_t *who, vec3_t where, int type)
 
 qboolean Pickup_Weapon(edict_t *ent, edict_t *other)
 {
-    int         index;
+    int         index, blaster;
     gitem_t     *ammo;
 
     index = ITEM_INDEX(ent->item);
@@ -142,9 +142,10 @@ qboolean Pickup_Weapon(edict_t *ent, edict_t *other)
         }
     }
 
-    if (other->client->pers.weapon != ent->item &&
+    if (((other->client->pers.weapon != ent->item) ||
+        (blaster = other->client->pers.weapon == FindItem("blaster"))) &&
         (other->client->pers.inventory[index] == 1) &&
-        (!deathmatch->value || other->client->pers.weapon == FindItem("blaster")))
+        (!deathmatch->value || blaster))
         other->client->newweapon = ent->item;
 
     return qtrue;
@@ -195,9 +196,15 @@ void ChangeWeapon(edict_t *ent)
         return;
     }
 
-    ent->client->weaponstate = WEAPON_ACTIVATING;
-    ent->client->ps.gunframe = 0;
-    ent->client->ps.gunindex = gi.modelindex(ent->client->pers.weapon->view_model);
+    if (!ent->client->pers.inventory[ITEM_INDEX(FindItem(ent->client->pers.weapon->pickup_name))]) {
+        ent->client->weaponstate = WEAPON_DEACTIVATED;
+        ent->client->ps.gunframe = 0;
+        ent->client->ps.gunindex = 0;
+    } else {
+        ent->client->weaponstate = WEAPON_ACTIVATING;
+        ent->client->ps.gunframe = 0;
+        ent->client->ps.gunindex = gi.modelindex(ent->client->pers.weapon->view_model);
+    }
 
     ent->client->anim_priority = ANIM_PAIN;
     if (ent->client->ps.pmove.pm_flags & PMF_DUCKED) {
@@ -206,7 +213,6 @@ void ChangeWeapon(edict_t *ent)
     } else {
         ent->s.frame = FRAME_pain301;
         ent->client->anim_end = FRAME_pain304;
-
     }
 }
 

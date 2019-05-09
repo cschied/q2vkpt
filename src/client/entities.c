@@ -621,6 +621,24 @@ static void CL_AddPacketEntities(void)
                     Q_concat(buffer, sizeof(buffer), "players/", ci->model_name, "/disguise.pcx", NULL);
                     ent.skin = R_RegisterSkin(buffer);
                 }
+            } else if (s1->modelindex4 == 255) {
+                // find and register all player models
+                if (!uis.numPlayerModels) {
+                    PlayerModel_Load();
+                    if (!uis.numPlayerModels) {
+                        Com_Printf("No player models found.\n");
+                        continue;
+                    }
+                }
+                char buffer[MAX_QPATH];
+                for (int i = 0; i < uis.numPlayerModels; i++)
+                    if (!strcmp(uis.pmi[i].directory, "male")){
+                        Q_concat(buffer, sizeof(buffer), "players/male/", uis.pmi[i].skindisplaynames[s1->skinnum % uis.pmi[i].nskins], ".pcx", NULL);
+                        break;
+                    }
+                ent.skinnum = s1->skinnum;
+                ent.skin = R_RegisterSkin(buffer);
+                ent.model = cl.model_draw[s1->modelindex];
             } else {
                 ent.skinnum = s1->skinnum;
                 ent.skin = 0;

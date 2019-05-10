@@ -1132,6 +1132,8 @@ void PutClientInServer(edict_t *ent)
     ent->watertype = 0;
     ent->flags &= ~FL_NO_KNOCKBACK;
     ent->svflags &= ~SVF_DEADMONSTER;
+    if (skill->value == 4)
+        ent->monsterinfo.aiflags |= AI_GOOD_GUY;
 
     VectorCopy(mins, ent->mins);
     VectorCopy(maxs, ent->maxs);

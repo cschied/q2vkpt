@@ -1217,12 +1217,12 @@ gitem_t itemlist[] = {
     */
     {
         "weapon_blaster",
-        NULL,
+        Pickup_Weapon,
         Use_Weapon,
-        NULL,
+        Drop_Weapon,
         Weapon_Blaster,
         "misc/w_pkup.wav",
-        NULL, 0,
+        "models/weapons/g_blast/tris.md2", EF_ROTATE,
         "models/weapons/v_blast/tris.md2",
         /* icon */      "w_blaster",
         /* pickup */    "Blaster",

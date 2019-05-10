@@ -139,6 +139,7 @@ void SP_monster_supertank(edict_t *self);
 void SP_monster_boss2(edict_t *self);
 void SP_monster_jorg(edict_t *self);
 void SP_monster_boss3_stand(edict_t *self);
+void SP_monster_makron(edict_t *self);
 
 void SP_monster_commander_body(edict_t *self);
 
@@ -259,6 +260,7 @@ static const spawn_func_t spawn_funcs[] = {
     {"monster_boss2", SP_monster_boss2},
     {"monster_boss3_stand", SP_monster_boss3_stand},
     {"monster_jorg", SP_monster_jorg},
+    {"monster_makron", SP_monster_makron},
 
     {"monster_commander_body", SP_monster_commander_body},
 
@@ -575,8 +577,8 @@ void SpawnEntities(const char *mapname, const char *entities, const char *spawnp
     skill_level = floor(skill->value);
     if (skill_level < 0)
         skill_level = 0;
-    if (skill_level > 3)
-        skill_level = 3;
+    if (skill_level > 4)
+        skill_level = 4;
     if (skill->value != skill_level)
         gi.cvar_forceset("skill", va("%f", skill_level));
 
@@ -628,7 +630,7 @@ void SpawnEntities(const char *mapname, const char *entities, const char *spawnp
                 if ( /* ((coop->value) && (ent->spawnflags & SPAWNFLAG_NOT_COOP)) || */
                     ((skill->value == 0) && (ent->spawnflags & SPAWNFLAG_NOT_EASY)) ||
                     ((skill->value == 1) && (ent->spawnflags & SPAWNFLAG_NOT_MEDIUM)) ||
-                    (((skill->value == 2) || (skill->value == 3)) && (ent->spawnflags & SPAWNFLAG_NOT_HARD))
+                    ((skill->value > 1) && (ent->spawnflags & SPAWNFLAG_NOT_HARD))
                 ) {
                     G_FreeEdict(ent);
                     inhibit++;

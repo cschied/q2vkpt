@@ -306,6 +306,15 @@ mmove_t soldier_move_run = {FRAME_run03, FRAME_run08, soldier_frames_run, NULL};
 
 void soldier_run(edict_t *self)
 {
+    if (skill->value == 4) {
+        if (!self->targetname && !self->monsterinfo.aiflags){
+            self->monsterinfo.currentmove = &soldier_move_stand1;
+            if (!(self->monsterinfo.aiflags & AI_STAND_GROUND))
+                self->monsterinfo.aiflags |= AI_STAND_GROUND;
+            return;
+        }
+    }
+
     if (self->monsterinfo.aiflags & AI_STAND_GROUND) {
         self->monsterinfo.currentmove = &soldier_move_stand1;
         return;
@@ -398,7 +407,9 @@ void soldier_pain(edict_t *self, edict_t *other, float kick, int damage)
         self->s.skinnum |= 1;
 
     if (level.time < self->pain_debounce_time) {
-        if ((self->velocity[2] > 100) && ((self->monsterinfo.currentmove == &soldier_move_pain1) || (self->monsterinfo.currentmove == &soldier_move_pain2) || (self->monsterinfo.currentmove == &soldier_move_pain3)))
+        if ((self->velocity[2] > 100) && ((self->monsterinfo.currentmove == &soldier_move_pain1) ||
+            (self->monsterinfo.currentmove == &soldier_move_pain2) ||
+            (self->monsterinfo.currentmove == &soldier_move_pain3)))
             self->monsterinfo.currentmove = &soldier_move_pain4;
         return;
     }
@@ -418,8 +429,8 @@ void soldier_pain(edict_t *self, edict_t *other, float kick, int damage)
         return;
     }
 
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     r = random();
 
@@ -448,7 +459,7 @@ void soldier_fire(edict_t *self, int flash_number)
     vec3_t  dir;
     vec3_t  end;
     float   r, u;
-    int     flash_index;
+    int     flash_index, dmg;
 
     if (self->s.skinnum < 2)
         flash_index = blaster_flash[flash_number];
@@ -479,15 +490,23 @@ void soldier_fire(edict_t *self, int flash_number)
         VectorNormalize(aim);
     }
 
+    dmg = 2;
+    if (skill->value == 4)
+        dmg *= 1.5; // in hell mode 50% more damage
+
     if (self->s.skinnum <= 1) {
-        monster_fire_blaster(self, start, aim, 5, 600, flash_index, EF_BLASTER);
+        dmg = 5;
+        if (skill->value == 4)
+            dmg *= 1.5; // in hell mode 50% more damage
+
+        monster_fire_blaster(self, start, aim, dmg, 600, flash_index, EF_BLASTER);
     } else if (self->s.skinnum <= 3) {
-        monster_fire_shotgun(self, start, aim, 2, 1, DEFAULT_SHOTGUN_HSPREAD, DEFAULT_SHOTGUN_VSPREAD, DEFAULT_SHOTGUN_COUNT, flash_index);
+        monster_fire_shotgun(self, start, aim, dmg, 1, DEFAULT_SHOTGUN_HSPREAD, DEFAULT_SHOTGUN_VSPREAD, DEFAULT_SHOTGUN_COUNT, flash_index);
     } else {
         if (!(self->monsterinfo.aiflags & AI_HOLD_FRAME))
-            self->monsterinfo.pausetime = level.time + (3 + rand() % 8) * FRAMETIME;
+            self->monsterinfo.pausetime = level.time + (3 + ((skill->value == 4)? 10 : (rand() % 8))) * FRAMETIME;
 
-        monster_fire_bullet(self, start, aim, 2, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, flash_index);
+        monster_fire_bullet(self, start, aim, dmg, 4, DEFAULT_BULLET_HSPREAD, DEFAULT_BULLET_VSPREAD, flash_index);
 
         if (level.time >= self->monsterinfo.pausetime)
             self->monsterinfo.aiflags &= ~AI_HOLD_FRAME;
@@ -511,7 +530,9 @@ void soldier_attack1_refire1(edict_t *self)
     if (self->enemy->health <= 0)
         return;
 
-    if (((skill->value == 3) && (random() < 0.5)) || (range(self, self->enemy) == RANGE_MELEE))
+    if (((skill->value == 4) && visible(self, self->enemy)) ||
+        ((skill->value == 3) && (random() < 0.5)) ||
+        (range(self, self->enemy) == RANGE_MELEE))
         self->monsterinfo.nextframe = FRAME_attak102;
     else
         self->monsterinfo.nextframe = FRAME_attak110;
@@ -525,7 +546,9 @@ void soldier_attack1_refire2(edict_t *self)
     if (self->enemy->health <= 0)
         return;
 
-    if (((skill->value == 3) && (random() < 0.5)) || (range(self, self->enemy) == RANGE_MELEE))
+    if (((skill->value == 4) && visible(self, self->enemy)) ||
+        ((skill->value == 3) && (random() < 0.5)) ||
+        (range(self, self->enemy) == RANGE_MELEE))
         self->monsterinfo.nextframe = FRAME_attak102;
 }
 
@@ -560,7 +583,9 @@ void soldier_attack2_refire1(edict_t *self)
     if (self->enemy->health <= 0)
         return;
 
-    if (((skill->value == 3) && (random() < 0.5)) || (range(self, self->enemy) == RANGE_MELEE))
+    if (((skill->value == 4) && visible(self, self->enemy)) ||
+        ((skill->value == 3) && (random() < 0.5)) ||
+        (range(self, self->enemy) == RANGE_MELEE))
         self->monsterinfo.nextframe = FRAME_attak204;
     else
         self->monsterinfo.nextframe = FRAME_attak216;
@@ -574,7 +599,9 @@ void soldier_attack2_refire2(edict_t *self)
     if (self->enemy->health <= 0)
         return;
 
-    if (((skill->value == 3) && (random() < 0.5)) || (range(self, self->enemy) == RANGE_MELEE))
+    if (((skill->value == 4) && visible(self, self->enemy)) ||
+        ((skill->value == 3) && (random() < 0.5)) ||
+        (range(self, self->enemy) == RANGE_MELEE))
         self->monsterinfo.nextframe = FRAME_attak204;
 }
 
@@ -682,7 +709,8 @@ void soldier_attack5_refire(edict_t *self)
     if (self->enemy->health <= 0)
         return;
 
-    if (((skill->value == 3) && (random() < 0.5)) || (range(self, self->enemy) == RANGE_MELEE))
+    if ((skill->value == 4) || ((skill->value == 3) && (random() < 0.5)) ||
+        (range(self, self->enemy) == RANGE_MELEE))
         self->monsterinfo.nextframe = FRAME_attak505;
 }
 
@@ -714,7 +742,7 @@ void soldier_attack6_refire(edict_t *self)
     if (range(self, self->enemy) < RANGE_MID)
         return;
 
-    if (skill->value == 3)
+    if (skill->value > 2)
         self->monsterinfo.nextframe = FRAME_runs03;
 }
 
@@ -739,7 +767,7 @@ mmove_t soldier_move_attack6 = {FRAME_runs01, FRAME_runs14, soldier_frames_attac
 void soldier_attack(edict_t *self)
 {
     if (self->s.skinnum < 4) {
-        if (random() < 0.5)
+        if ((skill->value == 4) || (random() < 0.5))
             self->monsterinfo.currentmove = &soldier_move_attack1;
         else
             self->monsterinfo.currentmove = &soldier_move_attack2;
@@ -790,6 +818,14 @@ mmove_t soldier_move_duck = {FRAME_duck01, FRAME_duck05, soldier_frames_duck, so
 void soldier_dodge(edict_t *self, edict_t *attacker, float eta)
 {
     float   r;
+
+    if (skill->value == 4) {
+        if (!self->enemy)
+            self->enemy = attacker;
+
+        self->monsterinfo.currentmove = &soldier_move_attack3;
+        return;
+    }
 
     r = random();
     if (r > 0.25)
@@ -1098,6 +1134,9 @@ void soldier_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damag
 {
     int     n;
 
+    if (skill->value == 4)
+        VectorCopy(self->s.origin, self->monsterinfo.last_sighting);
+
 // check for gib
     if (self->health <= self->gib_health) {
         gi.sound(self, CHAN_VOICE, gi.soundindex("misc/udeath.wav"), 1, ATTN_NORM, 0);
@@ -1131,7 +1170,7 @@ void soldier_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damag
     }
 
     n = rand() % 5;
-    if (n == 0)
+    if ((skill->value == 4) || (n == 0))
         self->monsterinfo.currentmove = &soldier_move_death1;
     else if (n == 1)
         self->monsterinfo.currentmove = &soldier_move_death2;
@@ -1204,6 +1243,11 @@ void SP_monster_soldier_light(edict_t *self)
     self->s.skinnum = 0;
     self->health = 20;
     self->gib_health = -30;
+
+    if (skill->value == 4) {
+        self->health *= 1.25; // in hell mode 25% hp more for monsters
+        self->gib_health *= 1.25;
+    }
 }
 
 /*QUAKED monster_soldier (1 .5 0) (-16 -16 -24) (16 16 32) Ambush Trigger_Spawn Sight
@@ -1224,6 +1268,11 @@ void SP_monster_soldier(edict_t *self)
     self->s.skinnum = 2;
     self->health = 30;
     self->gib_health = -30;
+
+    if (skill->value == 4) {
+        self->health *= 1.25; // in hell mode 25% hp more for monsters
+        self->gib_health *= 1.25;
+    }
 }
 
 /*QUAKED monster_soldier_ss (1 .5 0) (-16 -16 -24) (16 16 32) Ambush Trigger_Spawn Sight
@@ -1244,4 +1293,9 @@ void SP_monster_soldier_ss(edict_t *self)
     self->s.skinnum = 4;
     self->health = 40;
     self->gib_health = -30;
+
+    if (skill->value == 4) {
+        self->health *= 1.25; // in hell mode 25% hp more for monsters
+        self->gib_health *= 1.25;
+    }
 }

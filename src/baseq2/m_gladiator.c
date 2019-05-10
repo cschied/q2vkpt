@@ -114,6 +114,16 @@ mmove_t gladiator_move_run = {FRAME_run1, FRAME_run6, gladiator_frames_run, NULL
 
 void gladiator_run(edict_t *self)
 {
+    if (skill->value == 4) {
+        if (!self->targetname && !self->monsterinfo.aiflags){
+            self->monsterinfo.currentmove = &gladiator_move_stand;
+            if (!(self->monsterinfo.aiflags & AI_STAND_GROUND))
+                self->monsterinfo.aiflags |= AI_STAND_GROUND;
+
+            return;
+        }
+    }
+
     if (self->monsterinfo.aiflags & AI_STAND_GROUND)
         self->monsterinfo.currentmove = &gladiator_move_stand;
     else
@@ -155,6 +165,13 @@ mmove_t gladiator_move_attack_melee = {FRAME_melee1, FRAME_melee17, gladiator_fr
 
 void gladiator_melee(edict_t *self)
 {
+    extern void gladiator_attack (edict_t *self);
+
+    if (skill->value > 3) {
+        gladiator_attack(self);
+        return;
+    }
+
     self->monsterinfo.currentmove = &gladiator_move_attack_melee;
 }
 
@@ -164,6 +181,7 @@ void GladiatorGun(edict_t *self)
     vec3_t  start;
     vec3_t  dir;
     vec3_t  forward, right;
+    int     dmg;
 
     AngleVectors(self->s.angles, forward, right, NULL);
     G_ProjectSource(self->s.origin, monster_flash_offset[MZ2_GLADIATOR_RAILGUN_1], forward, right, start);
@@ -172,7 +190,11 @@ void GladiatorGun(edict_t *self)
     VectorSubtract(self->pos1, start, dir);
     VectorNormalize(dir);
 
-    monster_fire_railgun(self, start, dir, 50, 100, MZ2_GLADIATOR_RAILGUN_1);
+    dmg = 50;
+    if (skill->value > 3)
+        dmg *= 1.25; // 25% more damage for monsters
+
+    monster_fire_railgun(self, start, dir, dmg, 100, MZ2_GLADIATOR_RAILGUN_1);
 }
 
 mframe_t gladiator_frames_attack_gun [] = {
@@ -196,7 +218,7 @@ void gladiator_attack(edict_t *self)
     // a small safe zone
     VectorSubtract(self->s.origin, self->enemy->s.origin, v);
     range = VectorLength(v);
-    if (range <= (MELEE_DISTANCE + 32))
+    if ((skill->value < 4) && (range <= (MELEE_DISTANCE + 32)))
         return;
 
     // charge up the railgun
@@ -230,7 +252,6 @@ mmove_t gladiator_move_pain_air = {FRAME_painup1, FRAME_painup7, gladiator_frame
 
 void gladiator_pain(edict_t *self, edict_t *other, float kick, int damage)
 {
-
     if (self->health < (self->max_health / 2))
         self->s.skinnum = 1;
 
@@ -247,14 +268,13 @@ void gladiator_pain(edict_t *self, edict_t *other, float kick, int damage)
     else
         gi.sound(self, CHAN_VOICE, sound_pain2, 1, ATTN_NORM, 0);
 
-    if (skill->value == 3)
-        return;     // no pain anims in nightmare
+    if (skill->value > 2)
+        return;     // no pain anims in nightmare or hell
 
     if (self->velocity[2] > 100)
         self->monsterinfo.currentmove = &gladiator_move_pain_air;
     else
         self->monsterinfo.currentmove = &gladiator_move_pain;
-
 }
 
 
@@ -297,6 +317,9 @@ mmove_t gladiator_move_death = {FRAME_death1, FRAME_death22, gladiator_frames_de
 void gladiator_die(edict_t *self, edict_t *inflictor, edict_t *attacker, int damage, vec3_t point)
 {
     int     n;
+
+    if (skill->value > 3)
+        VectorCopy(self->s.origin, self->monsterinfo.last_sighting);
 
 // check for gib
     if (self->health <= self->gib_health) {
@@ -352,6 +375,11 @@ void SP_monster_gladiator(edict_t *self)
     self->health = 400;
     self->gib_health = -175;
     self->mass = 400;
+
+    if (skill->value > 3) {
+        self->health *= 1.25; // 25% more health for monsters
+        self->gib_health *= 1.25;
+    }
 
     self->pain = gladiator_pain;
     self->die = gladiator_die;
